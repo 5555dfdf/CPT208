@@ -1,46 +1,94 @@
 <script setup>
-import { inject, computed } from 'vue'
+import { computed, inject, ref } from "vue";
 
-const { collectibles, unlockedCount } = inject('museum')
+const { collectibles } = inject("museum");
+const activeThemeKey = ref("");
 
-const total = computed(() => collectibles.value.length)
-const pct = computed(() =>
-  total.value ? Math.round((unlockedCount.value / total.value) * 100) : 0,
-)
+const THEME_CONFIG = [
+  { key: "sculpture", label: "Sculpture Classics", icon: "S" },
+  { key: "ceramics", label: "Ceramic Legacy", icon: "C" },
+  { key: "bronze", label: "Bronze Civilization", icon: "B" },
+  { key: "metalwork", label: "Precious Metal Craft", icon: "M" },
+  { key: "ritual", label: "Ritual & Mask", icon: "R" },
+  { key: "mesopotamia", label: "Mesopotamian Stories", icon: "E" },
+];
+
+const THEME_BY_ID = {
+  "bronze-ding": "sculpture",
+  "jade-bi": "sculpture",
+  "porcelain-vase": "ceramics",
+  "bronze-bull-head": "bronze",
+  "silver-gilt-bowl": "metalwork",
+  "gelede-helmet-mask": "ritual",
+  "urn-ingirsu": "mesopotamia",
+};
+
+function getThemeKey(item) {
+  return THEME_BY_ID[item.id] || "sculpture";
+}
+
+const themeProgressList = computed(() =>
+  THEME_CONFIG.map((theme) => {
+    const items = collectibles.value.filter((c) => getThemeKey(c) === theme.key);
+    const total = items.length;
+    const unlocked = items.filter((c) => c.unlocked).length;
+    const pct = total ? Math.round((unlocked / total) * 100) : 0;
+    return { ...theme, items, total, unlocked, pct };
+  }).filter((theme) => theme.total > 0),
+);
+
+function toggleTheme(key) {
+  activeThemeKey.value = activeThemeKey.value === key ? "" : key;
+}
 </script>
 
 <template>
   <div class="page">
-    <div class="stats">
-      <div class="stat-block">
-        <span class="stat-num">{{ unlockedCount }}</span>
-        <span class="stat-label">已收集</span>
-      </div>
-      <div class="stat-bar-wrap" aria-hidden="true">
-        <div class="stat-bar" :style="{ width: pct + '%' }" />
-      </div>
-      <span class="stat-pct">{{ pct }}%</span>
-    </div>
+    <div class="stats-grid">
+      <article v-for="theme in themeProgressList" :key="theme.key" class="stats-card">
+        <button
+          type="button"
+          class="stats"
+          :class="{ active: activeThemeKey === theme.key }"
+          @click="toggleTheme(theme.key)"
+        >
+          <div class="stat-block">
+            <span class="stat-label">{{ theme.label }}</span>
+          </div>
+          <div class="progress-ring" aria-hidden="true">
+            <svg class="ring-svg" viewBox="0 0 40 40">
+              <circle class="ring-track" cx="20" cy="20" r="15" />
+              <circle
+                class="ring-progress"
+                cx="20"
+                cy="20"
+                r="15"
+                :style="{ strokeDashoffset: `${94.25 * (1 - theme.pct / 100)}` }"
+              />
+            </svg>
+          </div>
+          <span class="stat-pct">{{ theme.pct }}%</span>
+        </button>
 
-    <h2 class="h2">图鉴</h2>
-    <ul class="list">
-      <li
-        v-for="c in collectibles"
-        :key="c.id"
-        class="item"
-        :class="{ locked: !c.unlocked }"
-      >
-        <div class="thumb" aria-hidden="true">
-          {{ c.unlocked ? '文' : '？' }}
-        </div>
-        <div class="meta">
-          <span class="name">{{ c.unlocked ? c.name : '未解锁' }}</span>
-          <span class="hall">{{ c.hallName }}</span>
-          <p v-if="c.unlocked" class="snippet">{{ c.story.slice(0, 48) }}…</p>
-          <p v-else class="snippet muted">到扫描页识别该展品以解锁故事</p>
-        </div>
-      </li>
-    </ul>
+        <section v-show="activeThemeKey === theme.key" class="theme-inline">
+          <ul class="list">
+            <li
+              v-for="c in theme.items"
+              :key="c.id"
+              class="item"
+              :class="{ locked: !c.unlocked }"
+            >
+              <div class="meta">
+                <span class="name">{{ c.unlocked ? c.name : "Locked" }}</span>
+                <span class="hall">{{ c.hallName }}</span>
+                <p v-if="c.unlocked" class="snippet">{{ c.story.slice(0, 72) }}...</p>
+                <p v-else class="snippet muted">Scan this artifact to unlock its story.</p>
+              </div>
+            </li>
+          </ul>
+        </section>
+      </article>
+    </div>
   </div>
 </template>
 
@@ -48,64 +96,95 @@ const pct = computed(() =>
 .page {
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 14px;
+}
+
+.stats-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.stats-card {
+  background: var(--mq-bg-elevated);
+  border-radius: var(--mq-radius);
+  border: 1px solid var(--mq-border);
+  overflow: hidden;
 }
 
 .stats {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 14px 16px;
-  background: var(--mq-bg-elevated);
-  border-radius: var(--mq-radius);
-  border: 1px solid var(--mq-border);
+  width: 100%;
+  padding: 12px 14px;
+  background: transparent;
+  border: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.stats.active {
+  border-color: rgba(185, 138, 61, 0.5);
+  box-shadow: 0 0 0 1px rgba(185, 138, 61, 0.25) inset;
 }
 
 .stat-block {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  min-width: 56px;
-}
-
-.stat-num {
-  font-size: 1.35rem;
-  font-weight: 800;
-  color: var(--mq-accent);
-  font-variant-numeric: tabular-nums;
+  min-width: 132px;
 }
 
 .stat-label {
-  font-size: 0.7rem;
-  color: var(--mq-text-muted);
+  font-size: 0.95rem;
+  font-family: inherit;
+  font-weight: 500;
+  font-style: normal;
+  letter-spacing: normal;
+  color: #5b5246;
+  line-height: 1.4;
 }
 
-.stat-bar-wrap {
-  flex: 1;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--mq-surface);
-  overflow: hidden;
+.progress-ring {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 
-.stat-bar {
-  height: 100%;
-  border-radius: 999px;
-  background: linear-gradient(90deg, var(--mq-accent), #e8d48a);
-  transition: width 0.35s ease;
+.ring-svg {
+  width: 40px;
+  height: 40px;
+  transform: rotate(-90deg);
+}
+
+.ring-track,
+.ring-progress {
+  fill: none;
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+
+.ring-track {
+  stroke: var(--mq-surface);
+}
+
+.ring-progress {
+  stroke: var(--mq-accent);
+  stroke-dasharray: 94.25;
+  transition: stroke-dashoffset 0.35s ease;
 }
 
 .stat-pct {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--mq-text-muted);
-  min-width: 36px;
+  min-width: 38px;
   text-align: right;
+  font-size: 0.86rem;
+  font-weight: 700;
+  color: var(--mq-text-muted);
 }
 
-.h2 {
-  font-size: 1rem;
-  color: var(--mq-text-muted);
+.theme-inline {
+  padding: 0 12px 12px;
 }
 
 .list {
@@ -113,39 +192,21 @@ const pct = computed(() =>
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 0;
 }
 
 .item {
-  display: flex;
-  gap: 14px;
-  padding: 14px;
-  background: var(--mq-bg-elevated);
-  border-radius: var(--mq-radius);
-  border: 1px solid var(--mq-border);
+  display: block;
+  padding: 12px 2px;
+  border-bottom: 1px solid var(--mq-border);
+}
+
+.item:last-child {
+  border-bottom: 0;
 }
 
 .item.locked {
-  opacity: 0.72;
-}
-
-.thumb {
-  flex-shrink: 0;
-  width: 52px;
-  height: 52px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  font-size: 1.1rem;
-  background: var(--mq-surface);
-  color: var(--mq-accent);
-}
-
-.item.locked .thumb {
-  background: var(--mq-surface-soft);
-  color: var(--mq-text-muted);
+  opacity: 0.74;
 }
 
 .meta {
@@ -156,7 +217,7 @@ const pct = computed(() =>
 }
 
 .name {
-  font-weight: 600;
+  font-weight: 620;
   font-size: 1rem;
 }
 

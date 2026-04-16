@@ -1,5 +1,5 @@
 ﻿<script setup>
-import { onUnmounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import shop1 from '@/assets/shop-1.png'
 import shop2 from '@/assets/shop-2.png'
 import shop3 from '@/assets/shop-3.png'
@@ -8,6 +8,11 @@ import { storeProducts } from '@/data/storeProducts'
 const bannerRef = ref(null)
 const categoryRef = ref(null)
 const activeSlide = ref(0)
+const activeCategory = ref('Featured')
+const selectedProduct = ref(null)
+const activeActionTab = ref('cart')
+const cartOpen = ref(false)
+const cartItems = ref([])
 const dragState = {
   active: false,
   startX: 0,
@@ -21,32 +26,162 @@ const banners = [
     image: shop1,
     title: 'Bronze Echo Collection',
     subtitle: 'Inspired by ritual vessels and engraved linework',
-    cta: 'Explore Set',
   },
   {
     id: 'b2',
     image: shop2,
     title: 'Ceramic Story Series',
     subtitle: 'Museum light, glaze texture, and soft ivory tones',
-    cta: 'View Highlights',
   },
   {
     id: 'b3',
     image: shop3,
     title: 'Gallery Night Edition',
     subtitle: 'Limited keepsakes for guided evening routes',
-    cta: 'See Limited',
   },
 ]
 
 const categories = ['Featured', 'New Arrivals', 'Stationery', 'Wearables', 'Home Objects']
 const products = storeProducts
+const filteredProducts = computed(() =>
+  products.filter((item) => item.tags?.includes(activeCategory.value)),
+)
+const actionTabs = [
+  { key: 'cart', label: 'Add to Cart' },
+  { key: 'buy', label: 'Buy Now' },
+  { key: 'redeem', label: 'Redeem Points' },
+]
+const productDetails = {
+  'Inscribed Bookmark Set':
+    'A bronze-inspired stationery set with textured metal bookmarks and tassel cords, designed to echo inscription aesthetics from ritual artifacts.',
+  'Glaze Tone Postcard Box':
+    'A curated postcard box featuring glaze-gradient studies from Hall B ceramics, suitable for journaling, gifting, and exhibition notes.',
+  'Museum Route Tote':
+    'A lightweight tote printed with the museum night-route map, sized for notebooks, guide cards, and daily carry essentials.',
+  'Storylens Desk Calendar':
+    'A monthly desk calendar combining artifact highlights with short timeline notes, ideal for study desks and planning corners.',
+}
+const activeTabDescription = computed(() => {
+  if (activeActionTab.value === 'buy') {
+    return 'Complete checkout with standard payment and shipping.'
+  }
+  if (activeActionTab.value === 'redeem') {
+    return 'Use points to exchange this product in the rewards flow.'
+  }
+  return 'Save this item for later and continue browsing.'
+})
+const activeTabPrimaryLabel = computed(() => {
+  if (activeActionTab.value === 'buy') return 'Proceed to Checkout'
+  if (activeActionTab.value === 'redeem') return 'Redeem with Points'
+  return 'Add Item to Cart'
+})
+const selectedProductDetail = computed(() => {
+  if (!selectedProduct.value) return ''
+  return productDetails[selectedProduct.value.name] || selectedProduct.value.source
+})
+const cartItemCount = computed(() =>
+  cartItems.value.reduce((total, item) => total + item.qty, 0),
+)
+const cartTotalPrice = computed(() => {
+  const total = cartItems.value.reduce((sum, item) => sum + item.unitPrice * item.qty, 0)
+  return `CNY ${total}`
+})
+const cartTotalPoints = computed(() =>
+  cartItems.value.reduce((sum, item) => sum + (item.unitPoints || 0) * item.qty, 0),
+)
 
 function onBannerScroll() {
   const el = bannerRef.value
   if (!el) return
   const idx = Math.round(el.scrollLeft / el.clientWidth)
   activeSlide.value = Math.max(0, Math.min(idx, banners.length - 1))
+}
+
+function selectCategory(category) {
+  activeCategory.value = category
+}
+
+function openProductDetail(item) {
+  selectedProduct.value = item
+  activeActionTab.value = 'cart'
+}
+
+function closeProductDetail() {
+  selectedProduct.value = null
+}
+
+function parsePriceValue(priceText) {
+  const value = Number.parseInt(String(priceText).replace(/[^\d]/g, ''), 10)
+  return Number.isNaN(value) ? 0 : value
+}
+
+function parsePointsValue(pointsText) {
+  const value = Number.parseInt(String(pointsText).replace(/[^\d]/g, ''), 10)
+  return Number.isNaN(value) ? 0 : value
+}
+
+function addToCart(product) {
+  const existing = cartItems.value.find((item) => item.id === product.id)
+  if (existing) {
+    existing.qty += 1
+    return
+  }
+
+  cartItems.value.push({
+    id: product.id,
+    name: product.name,
+    image: product.image,
+    price: product.price,
+    unitPrice: parsePriceValue(product.price),
+    unitPoints: parsePointsValue(product.redeemPoints),
+    qty: 1,
+  })
+}
+
+function removeCartItem(productId) {
+  cartItems.value = cartItems.value.filter((item) => item.id !== productId)
+}
+
+function decrementCartQty(productId) {
+  const item = cartItems.value.find((entry) => entry.id === productId)
+  if (!item) return
+  if (item.qty <= 1) return
+  item.qty -= 1
+}
+
+function incrementCartQty(productId) {
+  const item = cartItems.value.find((entry) => entry.id === productId)
+  if (!item) return
+  item.qty += 1
+}
+
+function handlePrimaryAction() {
+  if (!selectedProduct.value) return
+
+  if (activeActionTab.value === 'cart') {
+    addToCart(selectedProduct.value)
+    cartOpen.value = true
+    return
+  }
+
+  closeProductDetail()
+}
+
+function toggleCartPanel() {
+  cartOpen.value = !cartOpen.value
+}
+
+function handleCartBuy() {
+  if (!cartItems.value.length) return
+  cartOpen.value = false
+}
+
+function handleOpenStoreProduct(event) {
+  const productId = event?.detail?.productId
+  if (!productId) return
+  const target = products.find((item) => item.id === productId)
+  if (!target) return
+  openProductDetail(target)
 }
 
 function startMouseDrag(event, target) {
@@ -80,6 +215,11 @@ function endMouseDrag() {
 
 onUnmounted(() => {
   window.removeEventListener('mousemove', onMouseDrag)
+  window.removeEventListener('mq-open-store-product', handleOpenStoreProduct)
+})
+
+onMounted(() => {
+  window.addEventListener('mq-open-store-product', handleOpenStoreProduct)
 })
 </script>
 
@@ -97,7 +237,6 @@ onUnmounted(() => {
           <div class="banner-overlay">
             <p class="banner-title">{{ b.title }}</p>
             <p class="banner-subtitle">{{ b.subtitle }}</p>
-            <button type="button" class="banner-cta">{{ b.cta }}</button>
           </div>
         </article>
       </div>
@@ -113,25 +252,135 @@ onUnmounted(() => {
       aria-label="Shop categories"
       @mousedown="startMouseDrag($event, 'category')"
     >
-      <button v-for="c in categories" :key="c" type="button" class="category-pill">
+      <button
+        v-for="c in categories"
+        :key="c"
+        type="button"
+        class="category-pill"
+        :class="{ active: c === activeCategory }"
+        @click="selectCategory(c)"
+      >
         {{ c }}
       </button>
     </section>
 
     <section class="goods-section" aria-label="Cultural products">
       <ul class="goods-list">
-        <li v-for="item in products" :key="item.id" class="goods-card">
+        <li v-for="item in filteredProducts" :key="item.id" class="goods-card" @click="openProductDetail(item)">
           <img class="goods-image" :src="item.image" :alt="item.name" />
           <div class="goods-copy">
             <h3 class="goods-name">{{ item.name }}</h3>
             <p class="goods-source">{{ item.source }}</p>
             <div class="goods-price-row">
               <p class="goods-price">{{ item.price }}</p>
-              <p class="goods-redeem">兑换价 {{ item.redeemPoints }} 积分</p>
+              <p class="goods-redeem">Redeem: {{ item.redeemPoints }} points</p>
             </div>
           </div>
         </li>
       </ul>
+
+      <p v-if="filteredProducts.length === 0" class="empty-state">No products available in this category.</p>
+    </section>
+
+    <div v-if="selectedProduct" class="detail-mask" @click="closeProductDetail">
+      <section class="detail-modal" aria-label="Product detail" @click.stop>
+        <button type="button" class="detail-close" aria-label="Close product detail" @click="closeProductDetail">
+          ×
+        </button>
+        <img class="detail-image" :src="selectedProduct.image" :alt="selectedProduct.name" />
+        <h3 class="detail-name">{{ selectedProduct.name }}</h3>
+        <p class="detail-copy">{{ selectedProductDetail }}</p>
+        <div class="detail-price-row">
+          <span class="detail-price">{{ selectedProduct.price }}</span>
+          <span class="detail-points">{{ selectedProduct.redeemPoints }} points</span>
+        </div>
+
+        <div class="detail-tabs" role="tablist" aria-label="Purchase options">
+          <button
+            v-for="tab in actionTabs"
+            :key="tab.key"
+            type="button"
+            class="detail-tab"
+            :class="{ active: tab.key === activeActionTab }"
+            @click="activeActionTab = tab.key"
+          >
+            {{ tab.label }}
+          </button>
+        </div>
+
+        <p class="detail-tab-copy">{{ activeTabDescription }}</p>
+        <button type="button" class="detail-primary-btn" @click="handlePrimaryAction">
+          {{ activeTabPrimaryLabel }}
+        </button>
+      </section>
+    </div>
+
+    <button type="button" class="cart-fab" aria-label="Open cart list" @click="toggleCartPanel">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        <path d="M4.5 5.5h2l1.2 9.2a1 1 0 0 0 1 .8h7.8a1 1 0 0 0 1-.8l1-6.6H7.1" />
+        <circle cx="10" cy="18.5" r="1.4" />
+        <circle cx="16" cy="18.5" r="1.4" />
+      </svg>
+      <span v-if="cartItemCount > 0" class="cart-badge">{{ cartItemCount }}</span>
+    </button>
+
+    <section v-if="cartOpen" class="cart-panel" aria-label="Shopping cart list">
+      <div class="cart-head">
+        <h3 class="cart-title">Your Cart</h3>
+        <button type="button" class="cart-close" aria-label="Close cart list" @click="cartOpen = false">×</button>
+      </div>
+
+      <ul v-if="cartItems.length > 0" class="cart-list">
+        <li v-for="item in cartItems" :key="item.id" class="cart-item">
+          <img :src="item.image" :alt="item.name" class="cart-thumb" />
+          <div class="cart-copy">
+            <p class="cart-name">{{ item.name }}</p>
+            <div class="cart-meta-row">
+              <p class="cart-meta">{{ item.price }} · Qty {{ item.qty }}</p>
+              <div class="cart-qty" aria-label="Adjust quantity">
+                <button
+                  type="button"
+                  class="qty-btn"
+                  aria-label="Decrease quantity"
+                  :disabled="item.qty <= 1"
+                  @click="decrementCartQty(item.id)"
+                >
+                  −
+                </button>
+                <span class="qty-value">{{ item.qty }}</span>
+                <button
+                  type="button"
+                  class="qty-btn"
+                  aria-label="Increase quantity"
+                  @click="incrementCartQty(item.id)"
+                >
+                  +
+                </button>
+              </div>
+            </div>
+          </div>
+          <button type="button" class="cart-remove" aria-label="Remove item" @click="removeCartItem(item.id)">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M4 7h16" />
+              <path d="M9.5 7V5.8c0-.5.4-.8.9-.8h3.2c.5 0 .9.3.9.8V7" />
+              <path d="M7.8 7l.6 10.4c0 .9.7 1.6 1.6 1.6h4c.9 0 1.6-.7 1.6-1.6L16.2 7" />
+              <path d="M10.2 10.2v5.4M13.8 10.2v5.4" />
+            </svg>
+          </button>
+        </li>
+      </ul>
+      <p v-else class="cart-empty">No items in cart yet.</p>
+
+      <div class="cart-foot">
+        <div class="cart-foot-left">
+          <span class="cart-total-label">Total</span>
+          <span class="cart-total-value">{{ cartTotalPrice }}</span>
+          <span class="cart-total-points">{{ cartTotalPoints }} pts</span>
+        </div>
+        <button type="button" class="cart-buy-btn" :disabled="cartItems.length === 0" @click="handleCartBuy">
+          Buy
+        </button>
+      </div>
     </section>
   </div>
 </template>
@@ -274,8 +523,16 @@ onUnmounted(() => {
   touch-action: pan-x;
 }
 
+.category-pill.active {
+  border-color: #b48a4e;
+  background: #fff3dc;
+  color: #7c5418;
+}
+
 .goods-section {
   display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .goods-list {
@@ -295,16 +552,17 @@ onUnmounted(() => {
   border-radius: 14px;
   background: #fffdf8;
   border: 1px solid rgba(130, 112, 88, 0.17);
+  cursor: pointer;
 }
 
 .goods-image {
   width: 108px;
   aspect-ratio: 587 / 357;
   border-radius: 10px;
-  object-fit: contain;
+  object-fit: cover;
   flex-shrink: 0;
   border: 1px solid rgba(130, 112, 88, 0.14);
-  background: #efe3d5;
+  background: transparent;
 }
 
 .goods-copy {
@@ -348,5 +606,379 @@ onUnmounted(() => {
   font-size: 0.76rem;
   color: #8a6b3a;
   font-weight: 600;
+}
+
+.empty-state {
+  margin: 0;
+  text-align: center;
+  font-size: 0.82rem;
+  color: #7a6f62;
+}
+
+.detail-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  background: rgba(32, 24, 14, 0.48);
+  display: flex;
+  align-items: flex-end;
+}
+
+.detail-modal {
+  width: 100%;
+  max-width: 480px;
+  margin: 0 auto;
+  border-top-left-radius: 20px;
+  border-top-right-radius: 20px;
+  background: #fff8ec;
+  border-top: 1px solid rgba(130, 112, 88, 0.2);
+  padding: 14px 14px calc(14px + var(--mq-safe-bottom));
+  position: relative;
+}
+
+.detail-close {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: 1px solid rgba(130, 112, 88, 0.22);
+  background: #f7efde;
+  color: #7f6d57;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.detail-image {
+  width: 100%;
+  aspect-ratio: 587 / 357;
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid rgba(130, 112, 88, 0.2);
+  background: #efe3d5;
+}
+
+.detail-name {
+  margin: 12px 0 0;
+  font-size: 1.05rem;
+  font-weight: 750;
+  color: #3f372f;
+}
+
+.detail-copy {
+  margin: 6px 0 0;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: #6f6356;
+}
+
+.detail-price-row {
+  margin-top: 10px;
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.detail-price {
+  font-size: 1rem;
+  font-weight: 750;
+  color: #9b753f;
+}
+
+.detail-points {
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: #8a6b3a;
+}
+
+.detail-tabs {
+  margin-top: 12px;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.detail-tab {
+  min-height: 34px;
+  border-radius: 999px;
+  border: 1px solid rgba(130, 112, 88, 0.24);
+  background: #f7f0e3;
+  color: #7a6b59;
+  font-size: 0.74rem;
+  font-weight: 650;
+}
+
+.detail-tab.active {
+  border-color: #b48a4e;
+  background: #fff3dc;
+  color: #7c5418;
+}
+
+.detail-tab-copy {
+  margin: 10px 0 0;
+  font-size: 0.78rem;
+  color: #6f6356;
+}
+
+.detail-primary-btn {
+  margin-top: 10px;
+  width: 100%;
+  min-height: 40px;
+  border-radius: 10px;
+  border: 1px solid rgba(160, 119, 54, 0.34);
+  background: #e7d2a7;
+  color: #6f4d1f;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+
+.cart-fab {
+  position: fixed;
+  right: 18px;
+  bottom: calc(var(--mq-nav-h) + var(--mq-safe-bottom) + 88px);
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  border: 1px solid rgba(130, 112, 88, 0.26);
+  background: #fff4de;
+  color: #8d6a33;
+  box-shadow: 0 8px 18px rgba(72, 52, 21, 0.18);
+  display: grid;
+  place-items: center;
+  z-index: 110;
+}
+
+.cart-fab svg {
+  width: 21px;
+  height: 21px;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cart-badge {
+  position: absolute;
+  top: -4px;
+  right: -3px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #b9853f;
+  color: #fff9ef;
+  font-size: 0.65rem;
+  font-weight: 700;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cart-panel {
+  position: fixed;
+  right: 14px;
+  bottom: calc(var(--mq-nav-h) + var(--mq-safe-bottom) + 146px);
+  width: min(320px, calc(100vw - 28px));
+  max-height: 320px;
+  border-radius: 14px;
+  border: 1px solid rgba(130, 112, 88, 0.24);
+  background: #fff9ef;
+  box-shadow: 0 14px 24px rgba(67, 49, 22, 0.2);
+  z-index: 115;
+  display: flex;
+  flex-direction: column;
+}
+
+.cart-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-bottom: 1px solid rgba(130, 112, 88, 0.14);
+}
+
+.cart-title {
+  margin: 0;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #4a4035;
+}
+
+.cart-close {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid rgba(130, 112, 88, 0.2);
+  background: #f7efde;
+  color: #7f6d57;
+  line-height: 1;
+}
+
+.cart-list {
+  list-style: none;
+  margin: 0;
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow: auto;
+}
+
+.cart-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 10px;
+  border: 1px solid rgba(130, 112, 88, 0.16);
+  background: #fffcf6;
+}
+
+.cart-thumb {
+  width: 44px;
+  height: 44px;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1px solid rgba(130, 112, 88, 0.16);
+}
+
+.cart-copy {
+  min-width: 0;
+  flex: 1;
+}
+
+.cart-name {
+  margin: 0;
+  font-size: 0.78rem;
+  font-weight: 650;
+  color: #4a4035;
+}
+
+.cart-meta {
+  margin: 2px 0 0;
+  font-size: 0.7rem;
+  color: #867460;
+}
+
+.cart-meta-row {
+  margin-top: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.cart-qty {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.qty-btn {
+  width: 18px;
+  height: 18px;
+  border-radius: 999px;
+  border: 1px solid rgba(141, 106, 51, 0.45);
+  background: #fff9ef;
+  color: #8d6a33;
+  font-size: 0.78rem;
+  font-weight: 700;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+}
+
+.qty-btn:disabled {
+  opacity: 0.45;
+}
+
+.qty-value {
+  min-width: 12px;
+  text-align: center;
+  font-size: 0.72rem;
+  color: #7a6b59;
+  font-weight: 700;
+}
+
+.cart-remove {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #8d6a33;
+  display: grid;
+  place-items: center;
+}
+
+.cart-remove svg {
+  width: 16px;
+  height: 16px;
+  display: block;
+  stroke: currentColor;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.cart-empty {
+  margin: 0;
+  padding: 18px 12px;
+  text-align: center;
+  color: #877665;
+  font-size: 0.78rem;
+}
+
+.cart-foot {
+  margin-top: auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  border-top: 1px solid rgba(130, 112, 88, 0.14);
+  background: #f9f1e1;
+}
+
+.cart-foot-left {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.cart-total-label {
+  font-size: 0.76rem;
+  color: #867460;
+}
+
+.cart-total-value {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #7c5418;
+}
+
+.cart-total-points {
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #8a6b3a;
+}
+
+.cart-buy-btn {
+  min-height: 30px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1px solid #b98a3d;
+  background: #b98a3d;
+  color: #fffdf8;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.cart-buy-btn:disabled {
+  opacity: 0.5;
 }
 </style>

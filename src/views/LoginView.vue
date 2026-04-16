@@ -2,7 +2,7 @@
 import { ref } from "vue";
 import heroBg from "@/assets/loginbackground.png";
 
-const emit = defineEmits(["success"]);
+const emit = defineEmits(["success", "open-register", "open-forgot-password"]);
 
 const username = ref("");
 const password = ref("");
@@ -11,6 +11,14 @@ const submitting = ref(false);
 
 function clearError() {
   error.value = "";
+}
+
+function openRegister() {
+  emit("open-register");
+}
+
+function openForgotPassword() {
+  emit("open-forgot-password");
 }
 
 async function submit() {
@@ -80,7 +88,13 @@ async function submit() {
 
         <div class="row-head">
           <span class="label">Password</span>
-          <button type="button" class="link-btn">Forgot password?</button>
+          <button
+            type="button"
+            class="link-btn"
+            @click="openForgotPassword"
+          >
+            Forgot password?
+          </button>
         </div>
         <label class="field">
           <div class="input-wrap">
@@ -125,7 +139,13 @@ async function submit() {
 
         <p class="signup">
           Don't have an account?
-          <button type="button" class="link-btn signup-btn">Sign Up</button>
+          <button
+            type="button"
+            class="link-btn signup-btn"
+            @click="openRegister"
+          >
+            Sign Up
+          </button>
         </p>
       </form>
     </section>
@@ -177,14 +197,6 @@ async function submit() {
   font-size: 0.95rem;
   color: #b17d26;
   font-weight: 600;
-}
-
-.hero-title {
-  margin: 8px 0 0;
-  font-size: 2.35rem;
-  line-height: 1.03;
-  font-weight: 700;
-  letter-spacing: -0.01em;
 }
 
 .hero-desc {

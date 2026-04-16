@@ -85,7 +85,7 @@ onBeforeUnmount(() => {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 8px;
+  gap: 2px;
 }
 
 .brand-logo-clip {
@@ -106,7 +106,7 @@ onBeforeUnmount(() => {
 }
 
 .tagline {
-  margin: -45px 0 0;
+  margin: 13px 0 0;
   font-size: clamp(0.88rem, 1.7vw, 0.96rem);
   font-weight: 300;
   line-height: 1.22;

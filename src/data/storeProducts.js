@@ -1,38 +1,43 @@
-import shop1 from '@/assets/shop-1.png'
-import shop2 from '@/assets/shop-2.png'
-import shop3 from '@/assets/shop-3.png'
+﻿import bookmarkSetImage from '@/assets/BookmarkSet.png'
+import postcardBoxImage from '@/assets/PostcardBox.png'
+import museumRouteToteImage from '@/assets/MuseumRouteTote.png'
+import storyLensDeskCalendarImage from '@/assets/StoryLensDeskCalendar.png'
 
 export const storeProducts = [
   {
     id: 'p1',
-    image: shop1,
+    image: bookmarkSetImage,
     name: 'Inscribed Bookmark Set',
     source: 'Inspired by bronze inscription rubbings.',
-    price: '¥ 68',
+    price: 'CNY 68',
     redeemPoints: 120,
+    tags: ['Featured', 'New Arrivals', 'Stationery'],
   },
   {
     id: 'p2',
-    image: shop2,
+    image: postcardBoxImage,
     name: 'Glaze Tone Postcard Box',
     source: 'From ceramic glaze palettes in Hall B.',
-    price: '¥ 96',
+    price: 'CNY 96',
     redeemPoints: 168,
+    tags: ['Featured', 'Stationery', 'Home Objects'],
   },
   {
     id: 'p3',
-    image: shop3,
+    image: museumRouteToteImage,
     name: 'Museum Route Tote',
     source: 'Based on the night-route exhibition map.',
-    price: '¥ 138',
+    price: 'CNY 138',
     redeemPoints: 240,
+    tags: ['Featured', 'New Arrivals', 'Wearables'],
   },
   {
     id: 'p4',
-    image: shop2,
+    image: storyLensDeskCalendarImage,
     name: 'Storylens Desk Calendar',
     source: 'Featuring artifact details and timeline notes.',
-    price: '¥ 88',
+    price: 'CNY 88',
     redeemPoints: 156,
+    tags: ['Featured', 'Stationery', 'Home Objects'],
   },
 ]

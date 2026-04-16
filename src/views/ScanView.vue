@@ -1,333 +1,347 @@
-<script setup>
-import { ref, reactive, inject, onActivated, onDeactivated, onUnmounted, nextTick, watch } from 'vue'
-import { buildApiUrl, streamFetch } from '@/utils/api'
+﻿<script setup>
+import {
+  ref,
+  reactive,
+  inject,
+  onActivated,
+  onDeactivated,
+  onUnmounted,
+  nextTick,
+  watch,
+} from "vue";
+import { buildApiUrl, streamFetch } from "@/utils/api";
 
-const { state, scanArtifact } = inject('museum')
-const selectedId = ref('porcelain-vase')
-const showResult = ref(false)
-const modelViewerError = ref('')
-const modelViewerLoading = ref(false)
+const { state, scanArtifact } = inject("museum");
+const selectedId = ref("porcelain-vase");
+const showResult = ref(false);
+const modelViewerError = ref("");
+const modelViewerLoading = ref(false);
 
-const showChat = ref(false)
-const chatSessionId = ref('')
-const chatInput = ref('')
-const chatSending = ref(false)
-const chatError = ref('')
-const chatMessages = ref([])
-const chatBodyRef = ref(null)
-let chatScrollRaf = 0
+const showChat = ref(false);
+const chatSessionId = ref("");
+const chatInput = ref("");
+const chatSending = ref(false);
+const chatError = ref("");
+const chatMessages = ref([]);
+const chatBodyRef = ref(null);
+let chatScrollRaf = 0;
 
-const videoRef = ref(null)
-const stream = ref(null)
-const cameraError = ref('')
-const cameraStarting = ref(false)
-const mirrorVideo = ref(false)
+const videoRef = ref(null);
+const stream = ref(null);
+const cameraError = ref("");
+const cameraStarting = ref(false);
+const mirrorVideo = ref(false);
 
-const storySpeaking = ref(false)
-const storySpeechError = ref('')
-const storyVoices = ref([])
-const selectedVoiceURI = ref(localStorage.getItem('mq_story_voice_uri') || '')
-let storyUtter = null
+const storySpeaking = ref(false);
+const storySpeechError = ref("");
+const storyVoices = ref([]);
+const selectedVoiceURI = ref(localStorage.getItem("mq_story_voice_uri") || "");
+let storyUtter = null;
 
 /** 递增以作废进行中的 getUserMedia（快速切走 Tab 时避免把旧流绑回 video） */
-let cameraEpoch = 0
+let cameraEpoch = 0;
 
 function stopCamera() {
-  cameraEpoch++
-  mirrorVideo.value = false
+  cameraEpoch++;
+  mirrorVideo.value = false;
   if (stream.value) {
-    stream.value.getTracks().forEach((t) => t.stop())
-    stream.value = null
+    stream.value.getTracks().forEach((t) => t.stop());
+    stream.value = null;
   }
   if (videoRef.value) {
-    videoRef.value.srcObject = null
+    videoRef.value.srcObject = null;
   }
 }
 
 function cameraErrorMessage(err) {
-  if (!err) return '无法打开摄像头'
-  const name = err.name || ''
-  if (name === 'NotAllowedError' || name === 'PermissionDeniedError') {
-    return '已拒绝摄像头权限，请在浏览器设置中允许访问'
+  if (!err) return "无法打开摄像头";
+  const name = err.name || "";
+  if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+    return "已拒绝摄像头权限，请在浏览器设置中允许访问";
   }
-  if (name === 'NotFoundError' || name === 'DevicesNotFoundError') {
-    return '未检测到摄像头设备'
+  if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+    return "未检测到摄像头设备";
   }
-  if (name === 'NotReadableError' || name === 'TrackStartError') {
-    return '摄像头被占用或不可用，请关闭其他应用后重试'
+  if (name === "NotReadableError" || name === "TrackStartError") {
+    return "摄像头被占用或不可用，请关闭其他应用后重试";
   }
-  if (name === 'OverconstrainedError') {
-    return '当前设备不满足拍摄要求，将尝试默认摄像头'
+  if (name === "OverconstrainedError") {
+    return "当前设备不满足拍摄要求，将尝试默认摄像头";
   }
-  if (name === 'SecurityError') {
-    return '需要 HTTPS 或 localhost 才能使用摄像头'
+  if (name === "SecurityError") {
+    return "需要 HTTPS 或 localhost 才能使用摄像头";
   }
-  return err.message || '无法打开摄像头'
+  return err.message || "无法打开摄像头";
 }
 
 async function startCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
-    cameraError.value = '当前浏览器不支持摄像头（需较新 Chrome / Safari / 微信内置浏览器等）'
-    return
+    cameraError.value =
+      "当前浏览器不支持摄像头（需较新 Chrome / Safari / 微信内置浏览器等）";
+    return;
   }
 
-  if (stream.value) return
+  if (stream.value) return;
 
-  const epoch = cameraEpoch
-  cameraStarting.value = true
-  cameraError.value = ''
+  const epoch = cameraEpoch;
+  cameraStarting.value = true;
+  cameraError.value = "";
 
   const tryConstraints = [
     {
       video: {
-        facingMode: { ideal: 'environment' },
+        facingMode: { ideal: "environment" },
         width: { ideal: 1280 },
         height: { ideal: 720 },
       },
       audio: false,
     },
-    { video: { facingMode: 'user' }, audio: false },
+    { video: { facingMode: "user" }, audio: false },
     { video: true, audio: false },
-  ]
+  ];
 
-  let lastErr = null
-  let attemptStream = null
+  let lastErr = null;
+  let attemptStream = null;
 
   for (const constraints of tryConstraints) {
     if (epoch !== cameraEpoch) {
       if (attemptStream) {
-        attemptStream.getTracks().forEach((t) => t.stop())
-        attemptStream = null
+        attemptStream.getTracks().forEach((t) => t.stop());
+        attemptStream = null;
       }
-      cameraStarting.value = false
-      return
+      cameraStarting.value = false;
+      return;
     }
     try {
       if (attemptStream) {
-        attemptStream.getTracks().forEach((t) => t.stop())
-        attemptStream = null
+        attemptStream.getTracks().forEach((t) => t.stop());
+        attemptStream = null;
       }
-      attemptStream = await navigator.mediaDevices.getUserMedia(constraints)
+      attemptStream = await navigator.mediaDevices.getUserMedia(constraints);
       if (epoch !== cameraEpoch) {
-        attemptStream.getTracks().forEach((t) => t.stop())
-        attemptStream = null
-        cameraStarting.value = false
-        return
+        attemptStream.getTracks().forEach((t) => t.stop());
+        attemptStream = null;
+        cameraStarting.value = false;
+        return;
       }
-      const s = attemptStream
-      stream.value = s
-      const track = s.getVideoTracks()[0]
-      const facing = track?.getSettings?.().facingMode
-      mirrorVideo.value = facing === 'user'
+      const s = attemptStream;
+      stream.value = s;
+      const track = s.getVideoTracks()[0];
+      const facing = track?.getSettings?.().facingMode;
+      mirrorVideo.value = facing === "user";
 
-      await nextTick()
-      const el = videoRef.value
+      await nextTick();
+      const el = videoRef.value;
       if (el) {
-        el.srcObject = s
-        el.setAttribute('playsinline', '')
-        el.setAttribute('webkit-playsinline', '')
-        el.muted = true
+        el.srcObject = s;
+        el.setAttribute("playsinline", "");
+        el.setAttribute("webkit-playsinline", "");
+        el.muted = true;
         try {
-          await el.play()
+          await el.play();
         } catch {
           /* 部分浏览器需用户手势，扫描按钮可再次触发 play */
         }
       }
       if (epoch !== cameraEpoch) {
-        stopCamera()
-        cameraStarting.value = false
-        return
+        stopCamera();
+        cameraStarting.value = false;
+        return;
       }
-      cameraError.value = ''
-      cameraStarting.value = false
-      return
+      cameraError.value = "";
+      cameraStarting.value = false;
+      return;
     } catch (e) {
-      lastErr = e
+      lastErr = e;
       if (attemptStream) {
-        attemptStream.getTracks().forEach((t) => t.stop())
-        attemptStream = null
+        attemptStream.getTracks().forEach((t) => t.stop());
+        attemptStream = null;
       }
     }
   }
 
   if (epoch !== cameraEpoch) {
-    cameraStarting.value = false
-    return
+    cameraStarting.value = false;
+    return;
   }
-  cameraError.value = cameraErrorMessage(lastErr)
-  cameraStarting.value = false
+  cameraError.value = cameraErrorMessage(lastErr);
+  cameraStarting.value = false;
 }
 
 async function retryCamera() {
-  stopCamera()
-  await startCamera()
+  stopCamera();
+  await startCamera();
 }
 
 onActivated(() => {
-  startCamera()
-})
+  startCamera();
+});
 
 onDeactivated(() => {
-  stopCamera()
-})
+  stopCamera();
+});
 
 onUnmounted(() => {
-  stopCamera()
-  stopStorySpeech()
+  stopCamera();
+  stopStorySpeech();
   if (chatScrollRaf) {
-    cancelAnimationFrame(chatScrollRaf)
-    chatScrollRaf = 0
+    cancelAnimationFrame(chatScrollRaf);
+    chatScrollRaf = 0;
   }
-})
+});
 
 function scheduleChatScrollToBottom() {
-  if (chatScrollRaf) return
+  if (chatScrollRaf) return;
   chatScrollRaf = requestAnimationFrame(() => {
-    chatScrollRaf = 0
-    const el = chatBodyRef.value
-    if (!el) return
-    el.scrollTop = el.scrollHeight
-  })
+    chatScrollRaf = 0;
+    const el = chatBodyRef.value;
+    if (!el) return;
+    el.scrollTop = el.scrollHeight;
+  });
 }
 
 function loadStoryVoices() {
-  if (typeof window === 'undefined' || !window.speechSynthesis?.getVoices) return
-  const vs = window.speechSynthesis.getVoices() || []
-  storyVoices.value = vs
+  if (typeof window === "undefined" || !window.speechSynthesis?.getVoices)
+    return;
+  const vs = window.speechSynthesis.getVoices() || [];
+  storyVoices.value = vs;
   if (!selectedVoiceURI.value && vs.length) {
-    const best = pickDefaultChineseVoice(vs)
-    if (best?.voiceURI) selectedVoiceURI.value = best.voiceURI
+    const best = pickDefaultChineseVoice(vs);
+    if (best?.voiceURI) selectedVoiceURI.value = best.voiceURI;
   }
 }
 
 function pickDefaultChineseVoice(vs) {
   const preferGoogleMandarinCN = (v) => {
-    const name = (v.name || '').toLowerCase()
-    const lang = (v.lang || '').toLowerCase()
-    const isGoogle = name.includes('google')
+    const name = (v.name || "").toLowerCase();
+    const lang = (v.lang || "").toLowerCase();
+    const isGoogle = name.includes("google");
     const isMandarin =
-      /普通话|中國大陸|中国大陆|mandarin/i.test(v.name || '') || name.includes('putonghua')
-    return isGoogle && isMandarin && lang.startsWith('zh-cn')
-  }
+      /普通话|中國大陸|中国大陆|mandarin/i.test(v.name || "") ||
+      name.includes("putonghua");
+    return isGoogle && isMandarin && lang.startsWith("zh-cn");
+  };
 
-  const exact = vs.find(preferGoogleMandarinCN)
-  if (exact) return exact
+  const exact = vs.find(preferGoogleMandarinCN);
+  if (exact) return exact;
 
   const isZh = (v) =>
-    (v.lang || '').toLowerCase().startsWith('zh') ||
-    /zh|中文|普通话|國語|国语|mandarin/i.test(v.name || '')
+    (v.lang || "").toLowerCase().startsWith("zh") ||
+    /zh|中文|普通话|國語|国语|mandarin/i.test(v.name || "");
 
-  const zhs = vs.filter(isZh)
-  const pool = zhs.length ? zhs : vs
+  const zhs = vs.filter(isZh);
+  const pool = zhs.length ? zhs : vs;
 
   const score = (v) => {
-    const name = (v.name || '').toLowerCase()
-    const lang = (v.lang || '').toLowerCase()
-    let s = 0
-    if (lang.startsWith('zh-cn')) s += 40
-    if (lang.startsWith('zh')) s += 10
-    if (/xiaoxiao|yunxi|yunyang|xiaoyi|xiaohan|xiaomo|xiaorui|xiaoqiu/.test(name)) s += 60
-    if (/microsoft|edge|natural/.test(name)) s += 30
-    if (/google/.test(name)) s += 20
-    if (/siri|ting-ting|meijia|li-mu/.test(name)) s += 10
-    return s
-  }
+    const name = (v.name || "").toLowerCase();
+    const lang = (v.lang || "").toLowerCase();
+    let s = 0;
+    if (lang.startsWith("zh-cn")) s += 40;
+    if (lang.startsWith("zh")) s += 10;
+    if (
+      /xiaoxiao|yunxi|yunyang|xiaoyi|xiaohan|xiaomo|xiaorui|xiaoqiu/.test(name)
+    )
+      s += 60;
+    if (/microsoft|edge|natural/.test(name)) s += 30;
+    if (/google/.test(name)) s += 20;
+    if (/siri|ting-ting|meijia|li-mu/.test(name)) s += 10;
+    return s;
+  };
 
-  return [...pool].sort((a, b) => score(b) - score(a))[0] || null
+  return [...pool].sort((a, b) => score(b) - score(a))[0] || null;
 }
 
 watch(showResult, async (open) => {
   if (!open) {
-    modelViewerError.value = ''
-    modelViewerLoading.value = false
-    stopStorySpeech()
+    modelViewerError.value = "";
+    modelViewerLoading.value = false;
+    stopStorySpeech();
     if (videoRef.value && stream.value) {
       try {
-        await videoRef.value.play()
+        await videoRef.value.play();
       } catch {
         /* ignore */
       }
     }
   } else {
-    loadStoryVoices()
-    const art = state.artifacts.find((a) => a.id === selectedId.value)
+    loadStoryVoices();
+    const art = state.artifacts.find((a) => a.id === selectedId.value);
     if (art?.modelGlb) {
-      modelViewerError.value = ''
-      modelViewerLoading.value = true
+      modelViewerError.value = "";
+      modelViewerLoading.value = true;
     }
   }
-})
+});
 
 function onModelLoaded() {
-  modelViewerLoading.value = false
-  modelViewerError.value = ''
+  modelViewerLoading.value = false;
+  modelViewerError.value = "";
 }
 
 function onModelError() {
-  modelViewerLoading.value = false
+  modelViewerLoading.value = false;
   modelViewerError.value =
-    '3D 模型加载失败。若已部署线上，请确认已上传 public/models 下对应 .glb，并重新构建/发布。'
+    "3D 模型加载失败。若已部署线上，请确认已上传 public/models 下对应 .glb，并重新构建/发布。";
 }
 
 async function runScan() {
-  const v = videoRef.value
+  const v = videoRef.value;
   if (v && stream.value) {
-    v.play().catch(() => {})
+    v.play().catch(() => {});
   }
-  await import('@google/model-viewer')
-  scanArtifact(selectedId.value)
-  showResult.value = true
+  await import("@google/model-viewer");
+  scanArtifact(selectedId.value);
+  showResult.value = true;
 }
 
 function closeResult() {
-  showResult.value = false
+  showResult.value = false;
 }
 
-const currentArt = () =>
-  state.artifacts.find((a) => a.id === selectedId.value)
+const currentArt = () => state.artifacts.find((a) => a.id === selectedId.value);
 
 function openChat() {
-  chatError.value = ''
-  showChat.value = true
+  chatError.value = "";
+  showChat.value = true;
   if (!chatMessages.value.length && currentArt()) {
     chatMessages.value = [
       {
-        role: 'assistant',
+        role: "assistant",
         content: `你可以问我关于「${currentArt().name}」的用途、历史背景、工艺特点、文化意义等。`,
       },
-    ]
+    ];
   }
-  nextTick(() => scheduleChatScrollToBottom())
+  nextTick(() => scheduleChatScrollToBottom());
 }
 
 function closeChat() {
-  showChat.value = false
+  showChat.value = false;
 }
 
 async function sendChat() {
-  const q = chatInput.value.trim()
-  if (!q || chatSending.value) return
+  const q = chatInput.value.trim();
+  if (!q || chatSending.value) return;
 
-  const art = currentArt()
-  chatError.value = ''
-  chatSending.value = true
-  chatMessages.value = chatMessages.value.concat({ role: 'user', content: q })
-  chatInput.value = ''
-  scheduleChatScrollToBottom()
+  const art = currentArt();
+  chatError.value = "";
+  chatSending.value = true;
+  chatMessages.value = chatMessages.value.concat({ role: "user", content: q });
+  chatInput.value = "";
+  scheduleChatScrollToBottom();
 
   // 插入占位的 assistant 消息，流式接收时逐字符追加
-  const aiMsg = reactive({ role: 'assistant', content: '', streaming: true })
-  chatMessages.value.push(aiMsg)
-  scheduleChatScrollToBottom()
+  const aiMsg = reactive({ role: "assistant", content: "", streaming: true });
+  chatMessages.value.push(aiMsg);
+  scheduleChatScrollToBottom();
 
   try {
     await streamFetch(
-      '/api/agent/chat',
+      "/api/agent/chat",
       {
-        method: 'POST',
+        method: "POST",
         body: {
           stream: true,
-          mode: 'sse',
+          mode: "sse",
           sessionId: chatSessionId.value || undefined,
           artifact: art
             ? {
@@ -339,95 +353,96 @@ async function sendChat() {
             : undefined,
           question: q,
         },
-        mode: 'sse', // 若后端是 SSE，则改为 'sse'
+        mode: "sse", // 若后端是 SSE，则改为 'sse'
       },
       (ch) => {
-        aiMsg.content += ch
-        scheduleChatScrollToBottom()
-      }
-    )
+        aiMsg.content += ch;
+        scheduleChatScrollToBottom();
+      },
+    );
   } catch (e) {
-    chatError.value = e?.message || '发送失败'
-    aiMsg.content += '\n\n（错误）' + (e?.message || '发送失败')
-    scheduleChatScrollToBottom()
+    chatError.value = e?.message || "发送失败";
+    aiMsg.content += "\n\n（错误）" + (e?.message || "发送失败");
+    scheduleChatScrollToBottom();
   } finally {
-    aiMsg.streaming = false
-    chatSending.value = false
-    scheduleChatScrollToBottom()
+    aiMsg.streaming = false;
+    chatSending.value = false;
+    scheduleChatScrollToBottom();
   }
 }
 
-
 function stopStorySpeech() {
-  storySpeechError.value = ''
-  storySpeaking.value = false
-  storyUtter = null
+  storySpeechError.value = "";
+  storySpeaking.value = false;
+  storyUtter = null;
   try {
-    window.speechSynthesis?.cancel?.()
+    window.speechSynthesis?.cancel?.();
   } catch {
     /* ignore */
   }
 }
 
 function onVoiceChange() {
-  localStorage.setItem('mq_story_voice_uri', selectedVoiceURI.value || '')
+  localStorage.setItem("mq_story_voice_uri", selectedVoiceURI.value || "");
   if (storySpeaking.value) {
-    stopStorySpeech()
-    toggleStorySpeech()
+    stopStorySpeech();
+    toggleStorySpeech();
   }
 }
 
 function toggleStorySpeech() {
-  storySpeechError.value = ''
-  const art = currentArt()
-  const text = art?.story?.trim?.() || ''
-  if (!text) return
+  storySpeechError.value = "";
+  const art = currentArt();
+  const text = art?.story?.trim?.() || "";
+  if (!text) return;
 
   if (storySpeaking.value) {
-    stopStorySpeech()
-    return
+    stopStorySpeech();
+    return;
   }
 
-  if (typeof window === 'undefined' || !window.speechSynthesis || !window.SpeechSynthesisUtterance) {
-    storySpeechError.value = '当前浏览器不支持语音播放'
-    return
+  if (
+    typeof window === "undefined" ||
+    !window.speechSynthesis ||
+    !window.SpeechSynthesisUtterance
+  ) {
+    storySpeechError.value = "当前浏览器不支持语音播放";
+    return;
   }
 
-  stopStorySpeech()
-  const u = new SpeechSynthesisUtterance(text)
-  u.lang = 'zh-CN'
-  const v = storyVoices.value.find((x) => x.voiceURI === selectedVoiceURI.value)
-  if (v) u.voice = v
-  u.rate = 1
-  u.pitch = 1
-  u.volume = 1
+  stopStorySpeech();
+  const u = new SpeechSynthesisUtterance(text);
+  u.lang = "zh-CN";
+  const v = storyVoices.value.find(
+    (x) => x.voiceURI === selectedVoiceURI.value,
+  );
+  if (v) u.voice = v;
+  u.rate = 1;
+  u.pitch = 1;
+  u.volume = 1;
   u.onend = () => {
-    storySpeaking.value = false
-    storyUtter = null
-  }
+    storySpeaking.value = false;
+    storyUtter = null;
+  };
   u.onerror = () => {
-    storySpeaking.value = false
-    storyUtter = null
-    storySpeechError.value = '语音播放失败（可能被系统/浏览器限制）'
-  }
-  storyUtter = u
-  storySpeaking.value = true
+    storySpeaking.value = false;
+    storyUtter = null;
+    storySpeechError.value = "语音播放失败（可能被系统/浏览器限制）";
+  };
+  storyUtter = u;
+  storySpeaking.value = true;
   try {
-    window.speechSynthesis.speak(u)
+    window.speechSynthesis.speak(u);
   } catch {
-    storySpeaking.value = false
-    storyUtter = null
-    storySpeechError.value = '语音播放失败'
+    storySpeaking.value = false;
+    storyUtter = null;
+    storySpeechError.value = "语音播放失败";
   }
 }
 </script>
 
 <template>
   <div class="page">
-    <p class="lead">
-      进入本页会自动请求摄像头权限（后置优先）。识别结果仍可用下方下拉模拟，便于对接后端前演示流程。
-    </p>
-
     <div class="camera" aria-label="相机预览">
       <video
         ref="videoRef"
@@ -447,27 +462,43 @@ function toggleStorySpeech() {
         </div>
       </div>
 
-      <div v-if="cameraStarting && !stream" class="camera-status">正在开启摄像头…</div>
+      <div v-if="cameraStarting && !stream" class="camera-status">
+        正在开启摄像头…
+      </div>
       <div v-else-if="cameraError" class="camera-status error">
         <p>{{ cameraError }}</p>
-        <button type="button" class="retry-btn" @click="retryCamera">重试</button>
+        <button type="button" class="retry-btn" @click="retryCamera">
+          重试
+        </button>
       </div>
-      <p v-else class="camera-hint">将二维码或展品置于框内 · 点「扫描」完成识别</p>
+      <p v-else class="camera-hint">
+        将二维码或展品置于框内 · 点「扫描」完成识别
+      </p>
     </div>
 
-    <label class="field">
-      <span class="field-label">模拟识别目标（无真实识别时）</span>
-      <select v-model="selectedId" class="select">
-        <option v-for="a in state.artifacts" :key="a.id" :value="a.id">
-          {{ a.name }} · {{ a.hallName }}
-        </option>
-      </select>
-    </label>
+    <div class="scan-controls">
+      <label class="field">
+        <select v-model="selectedId" class="select">
+          <option v-for="a in state.artifacts" :key="a.id" :value="a.id">
+            {{ a.name }} · {{ a.hallName }}
+          </option>
+        </select>
+      </label>
 
-    <button type="button" class="scan-btn" @click="runScan">扫描</button>
+      <button type="button" class="scan-btn" @click="runScan">Scan</button>
+    </div>
 
-    <div v-if="showResult && currentArt()" class="sheet" @click.self="closeResult">
-      <div class="sheet-panel" role="dialog" aria-modal="true" aria-labelledby="scan-title">
+    <div
+      v-if="showResult && currentArt()"
+      class="sheet"
+      @click.self="closeResult"
+    >
+      <div
+        class="sheet-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="scan-title"
+      >
         <div class="sheet-head">
           <h2 id="scan-title" class="sheet-title">{{ currentArt().name }}</h2>
           <div class="head-tools">
@@ -482,9 +513,13 @@ function toggleStorySpeech() {
                 @touchstart.passive="loadStoryVoices"
               >
                 <option value="" disabled>
-                  {{ storyVoices.length ? '选择声音' : '无可用语音' }}
+                  {{ storyVoices.length ? "选择声音" : "无可用语音" }}
                 </option>
-                <option v-for="v in storyVoices" :key="v.voiceURI" :value="v.voiceURI">
+                <option
+                  v-for="v in storyVoices"
+                  :key="v.voiceURI"
+                  :value="v.voiceURI"
+                >
                   {{ v.name }}（{{ v.lang }}）
                 </option>
               </select>
@@ -497,19 +532,28 @@ function toggleStorySpeech() {
               :aria-pressed="storySpeaking ? 'true' : 'false'"
               @click="toggleStorySpeech"
             >
-              {{ storySpeaking ? '停止' : '播放故事' }}
+              {{ storySpeaking ? "停止" : "播放故事" }}
             </button>
           </div>
         </div>
-        <p class="sheet-sub">{{ currentArt().hallName }} · +{{ currentArt().points }} 积分（首次）</p>
+        <p class="sheet-sub">
+          {{ currentArt().hallName }} · +{{ currentArt().points }} 积分（首次）
+        </p>
 
         <div v-if="currentArt().modelGlb" class="model-block">
-          <p class="model-hint">单指拖动旋转视角 · 双指捏合缩放 · 可转到顶部、底部观察</p>
+          <p class="model-hint">
+            单指拖动旋转视角 · 双指捏合缩放 · 可转到顶部、底部观察
+          </p>
           <div class="model-viewer-wrap">
-            <div v-if="modelViewerLoading && !modelViewerError" class="model-loading">
+            <div
+              v-if="modelViewerLoading && !modelViewerError"
+              class="model-loading"
+            >
               模型加载中…
             </div>
-            <p v-if="modelViewerError" class="model-error">{{ modelViewerError }}</p>
+            <p v-if="modelViewerError" class="model-error">
+              {{ modelViewerError }}
+            </p>
             <model-viewer
               :key="currentArt().id + '-' + showResult"
               class="artifact-model"
@@ -530,25 +574,38 @@ function toggleStorySpeech() {
         </div>
 
         <p class="sheet-story">{{ currentArt().story }}</p>
-        <p v-if="storySpeechError" class="story-error" role="status">{{ storySpeechError }}</p>
+        <p v-if="storySpeechError" class="story-error" role="status">
+          {{ storySpeechError }}
+        </p>
         <div class="sheet-actions">
-          <button type="button" class="btn-secondary" @click="closeResult">关闭</button>
-          <button type="button" class="btn-secondary" @click="openChat">问问AI</button>
-          <button type="button" class="btn-primary" @click="closeResult">收入收藏</button>
+          <button type="button" class="btn-secondary" @click="closeResult">
+            Close
+          </button>
+          <button type="button" class="btn-secondary" @click="openChat">
+            Ask AI
+          </button>
         </div>
       </div>
     </div>
 
-    
-    
     <div v-if="showChat" class="chat-sheet" @click.self="closeChat">
-      <div class="chat-panel" role="dialog" aria-modal="true" aria-labelledby="chat-title">
+      <div
+        class="chat-panel"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="chat-title"
+      >
         <div class="chat-head">
           <div class="chat-title-wrap">
-            <h3 id="chat-title" class="chat-title">AI 讲解</h3>
-            <p class="chat-sub">当前文物：{{ currentArt()?.name }}</p>
+            <h3 id="chat-title" class="chat-title">AI Guide</h3>
+            <p class="chat-sub">Current Artifact: {{ currentArt()?.name }}</p>
           </div>
-          <button type="button" class="chat-close" @click="closeChat">关闭</button>
+          <button type="button" class="chat-close" @click="closeChat">
+            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path d="M9 6l6 6-6 6" />
+            </svg>
+            <span class="sr-only">Back</span>
+          </button>
         </div>
 
         <div ref="chatBodyRef" class="chat-body" aria-label="对话内容">
@@ -571,8 +628,12 @@ function toggleStorySpeech() {
             placeholder="问点什么，比如：它有什么用途？"
             :disabled="chatSending"
           />
-          <button type="submit" class="chat-send" :disabled="chatSending || !chatInput.trim()">
-            {{ chatSending ? '发送中…' : '发送' }}
+          <button
+            type="submit"
+            class="chat-send"
+            :disabled="chatSending || !chatInput.trim()"
+          >
+            {{ chatSending ? "Sending..." : "Send" }}
           </button>
         </form>
       </div>
@@ -582,22 +643,21 @@ function toggleStorySpeech() {
 
 <style scoped>
 .page {
+  position: relative;
   display: flex;
   flex-direction: column;
-  gap: 16px;
-}
-
-.lead {
-  font-size: 0.95rem;
-  color: var(--mq-text-muted);
-  line-height: 1.5;
+  gap: 0;
+  height: 100%;
+  min-height: 0;
+  padding-bottom: 0;
 }
 
 .camera {
   position: relative;
-  height: 240px;
+  height: 100%;
+  min-height: 0;
   border-radius: var(--mq-radius);
-  background: #FAF3E9;
+  background: #faf3e9;
   border: 1px solid var(--mq-border);
   overflow: hidden;
 }
@@ -684,7 +744,7 @@ function toggleStorySpeech() {
 }
 
 .camera-status {
-  position: absolute;
+  position: fixed;
   inset: 0;
   display: flex;
   flex-direction: column;
@@ -692,11 +752,11 @@ function toggleStorySpeech() {
   justify-content: center;
   gap: 12px;
   padding: 16px;
-  background: rgba(250, 243, 233, 0.9);
+  background: rgba(250, 243, 233, 0.92);
   font-size: 0.88rem;
   color: var(--mq-text-muted);
   text-align: center;
-  z-index: 2;
+  z-index: 20;
 }
 
 .camera-status.error {
@@ -719,19 +779,29 @@ function toggleStorySpeech() {
   gap: 8px;
 }
 
-.field-label {
-  font-size: 0.85rem;
-  color: var(--mq-text-muted);
+.scan-controls {
+  position: fixed;
+  width: min(62%, 360px);
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: calc(var(--mq-nav-h) + var(--mq-safe-bottom) + 12px);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 52;
 }
 
 .select {
   min-height: var(--mq-tap-min);
   padding: 0 14px;
   border-radius: 10px;
-  background: var(--mq-bg-elevated);
-  border: 1px solid var(--mq-border);
-  color: var(--mq-text);
+  background: rgba(250, 243, 233, 0.45);
+  border: 1px solid rgba(205, 188, 163, 0.6);
+  color: #3d352b;
   appearance: none;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%239aa8a2' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 14px center;
@@ -872,7 +942,7 @@ function toggleStorySpeech() {
   height: min(42vh, 300px);
   border-radius: 12px;
   overflow: hidden;
-  background: radial-gradient(ellipse at center, #f5ece0 0%, #FAF3E9 70%);
+  background: radial-gradient(ellipse at center, #f5ece0 0%, #faf3e9 70%);
 }
 
 .model-loading,
@@ -942,8 +1012,9 @@ function toggleStorySpeech() {
 }
 
 .btn-secondary {
-  background: var(--mq-surface-soft);
-  color: var(--mq-text);
+  background: #b98a3d;
+  color: #fffdf8;
+  border: 1px solid #b98a3d;
 }
 
 .btn-primary {
@@ -997,12 +1068,26 @@ function toggleStorySpeech() {
 }
 
 .chat-close {
-  min-height: 40px;
-  padding: 0 14px;
-  border-radius: 10px;
-  background: var(--mq-surface-soft);
-  color: var(--mq-text);
-  font-weight: 600;
+  width: 24px;
+  height: 24px;
+  min-height: 24px;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #4f4334;
+  border: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.chat-close svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .chat-body {
@@ -1050,8 +1135,9 @@ function toggleStorySpeech() {
   gap: 10px;
   padding: 12px;
   border-top: 1px solid var(--mq-border);
-  background: rgba(15, 23, 20, 0.65);
-  backdrop-filter: blur(10px);
+  background: rgba(250, 243, 233, 0.94);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
 }
 
 .chat-input {
@@ -1059,9 +1145,20 @@ function toggleStorySpeech() {
   min-height: 44px;
   border-radius: 12px;
   padding: 0 12px;
-  background: var(--mq-surface);
-  border: 1px solid var(--mq-border);
-  color: var(--mq-text);
+  background: rgba(255, 253, 248, 0.88);
+  border: 1px solid rgba(185, 138, 61, 0.28);
+  color: #4a3f33;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+}
+
+.chat-input::placeholder {
+  color: #9a8567;
+}
+
+.chat-input:focus {
+  outline: none;
+  border-color: #ffffff;
+  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.45);
 }
 
 .chat-send {
@@ -1069,10 +1166,10 @@ function toggleStorySpeech() {
   min-height: 44px;
   padding: 0 16px;
   border-radius: 12px;
-  background: var(--mq-accent-soft);
-  color: var(--mq-accent);
+  background: #9f712c;
+  color: #fffdf8;
   font-weight: 800;
-  border: 1px solid rgba(201, 162, 39, 0.35);
+  border: 1px solid #9f712c;
 }
 
 .chat-send:disabled {

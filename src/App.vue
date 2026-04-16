@@ -1,30 +1,35 @@
 ﻿<script setup>
-import { computed, provide, ref } from 'vue'
-import avatarImg from '@/assets/avatar1.png'
-import { storeProducts } from '@/data/storeProducts'
-import { createMuseumStore } from './museum/store'
-import CommunityView from './views/CommunityView.vue'
-import HomeView from './views/HomeView.vue'
-import LoginView from './views/LoginView.vue'
-import ProfileView from './views/ProfileView.vue'
-import ScanView from './views/ScanView.vue'
-import SplashPage from './views/SplashPage.vue'
-import StoreView from './views/StoreView.vue'
+import { computed, provide, ref } from "vue";
+import avatarImg from "@/assets/avatar1.png";
+import { storeProducts } from "@/data/storeProducts";
+import { createMuseumStore } from "./museum/store";
+import { createSocialStore } from "./museum/socialStore";
+import CommunityView from "./views/CommunityView.vue";
+import ForgotPasswordView from "./views/ForgotPasswordView.vue";
+import HomeView from "./views/HomeView.vue";
+import LoginView from "./views/LoginView.vue";
+import ProfileView from "./views/ProfileView.vue";
+import RegisterView from "./views/RegisterView.vue";
+import ScanView from "./views/ScanView.vue";
+import SplashPage from "./views/SplashPage.vue";
+import StoreView from "./views/StoreView.vue";
 
-const museum = createMuseumStore()
-provide('museum', museum)
+const museum = createMuseumStore();
+provide("museum", museum);
+const social = createSocialStore();
+provide("social", social);
 
-const stage = ref('splash')
-const current = ref('home')
-const previousTab = ref('home')
+const stage = ref("splash");
+const current = ref("home");
+const previousTab = ref("home");
 
 const tabs = [
-  { key: 'home', label: 'Home' },
-  { key: 'scan', label: 'Scan' },
-  { key: 'profile', label: 'Profile' },
-  { key: 'store', label: 'Store' },
-  { key: 'community', label: 'Community' },
-]
+  { key: "home", label: "Home" },
+  { key: "scan", label: "Scan" },
+  { key: "profile", label: "Profile" },
+  { key: "store", label: "Store" },
+  { key: "community", label: "Community" },
+];
 
 const views = {
   home: HomeView,
@@ -32,84 +37,141 @@ const views = {
   store: StoreView,
   community: CommunityView,
   profile: ProfileView,
-}
+};
 
-const ActiveView = computed(() => views[current.value] || HomeView)
-const topTitle = computed(() => (current.value === 'community' ? 'Community Feed' : 'Museum Quest'))
+const ActiveView = computed(() => views[current.value] || HomeView);
+const topTitle = computed(() =>
+  current.value === "community" ? "Community Feed" : "Museum Quest",
+);
 
-const storeSearch = ref('')
-const storeSearchFocused = ref(false)
+const storeSearch = ref("");
+const storeSearchFocused = ref(false);
 
 const matchedProducts = computed(() => {
-  const keyword = storeSearch.value.trim().toLowerCase()
-  if (!keyword) return []
+  const keyword = storeSearch.value.trim().toLowerCase();
+  if (!keyword) return [];
 
   return storeProducts
     .map((item) => {
-      const n = item.name.toLowerCase()
-      const s = item.source.toLowerCase()
-      const score = (n.startsWith(keyword) ? 2 : 0) + (n.includes(keyword) ? 1 : 0) + (s.includes(keyword) ? 1 : 0)
-      return { item, score }
+      const n = item.name.toLowerCase();
+      const s = item.source.toLowerCase();
+      const score =
+        (n.startsWith(keyword) ? 2 : 0) +
+        (n.includes(keyword) ? 1 : 0) +
+        (s.includes(keyword) ? 1 : 0);
+      return { item, score };
     })
     .filter((entry) => entry.score > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, 4)
-    .map((entry) => entry.item)
-})
+    .map((entry) => entry.item);
+});
 
 const showStoreMatches = computed(
-  () => current.value === 'store' && storeSearchFocused.value && matchedProducts.value.length > 0,
-)
+  () =>
+    current.value === "store" &&
+    storeSearchFocused.value &&
+    matchedProducts.value.length > 0,
+);
 
 function onLoginSuccess(payload) {
-  stage.value = 'app'
-  localStorage.setItem('mq_authed', '1')
-  if (payload?.username) localStorage.setItem('mq_user', payload.username)
+  stage.value = "app";
+  localStorage.setItem("mq_authed", "1");
+  if (payload?.username) localStorage.setItem("mq_user", payload.username);
 }
 
 function onSplashDone() {
-  stage.value = 'login'
+  stage.value = "login";
+}
+
+function openRegister() {
+  stage.value = "register";
+}
+
+function openForgotPassword() {
+  stage.value = "forgot-password";
+}
+
+function backToLogin() {
+  stage.value = "login";
+}
+
+function onRegisterSuccess(payload) {
+  stage.value = "app";
+  localStorage.setItem("mq_authed", "1");
+  if (payload?.username) localStorage.setItem("mq_user", payload.username);
 }
 
 function switchTab(key) {
-  if (!key || key === current.value) return
-  if (current.value !== 'profile') {
-    previousTab.value = current.value
+  if (!key || key === current.value) return;
+  if (current.value !== "profile") {
+    previousTab.value = current.value;
   }
-  current.value = key
+  current.value = key;
 }
 
 function leaveProfile() {
-  current.value = previousTab.value || 'home'
+  current.value = previousTab.value || "home";
 }
 
 function onStoreSearchBlur() {
   window.setTimeout(() => {
-    storeSearchFocused.value = false
-  }, 120)
+    storeSearchFocused.value = false;
+  }, 120);
 }
 
 function pickStoreProduct(name) {
-  storeSearch.value = name
-  storeSearchFocused.value = false
+  const picked = storeProducts.find((item) => item.name === name);
+  storeSearch.value = name;
+  storeSearchFocused.value = false;
+  if (!picked) return;
+
+  current.value = "store";
+  window.dispatchEvent(
+    new CustomEvent("mq-open-store-product", {
+      detail: { productId: picked.id },
+    }),
+  );
 }
 
 function confirmStoreSearch() {
-  storeSearchFocused.value = true
+  storeSearchFocused.value = true;
 }
 </script>
 
 <template>
   <div class="app-screen">
     <SplashPage v-if="stage === 'splash'" @done="onSplashDone" />
-    <LoginView v-else-if="stage === 'login'" @success="onLoginSuccess" />
+    <LoginView
+      v-else-if="stage === 'login'"
+      @success="onLoginSuccess"
+      @open-register="openRegister"
+      @open-forgot-password="openForgotPassword"
+    />
+    <RegisterView
+      v-else-if="stage === 'register'"
+      @back-to-login="backToLogin"
+      @registered="onRegisterSuccess"
+    />
+    <ForgotPasswordView
+      v-else-if="stage === 'forgot-password'"
+      @back-to-login="backToLogin"
+    />
 
     <div v-else class="shell">
-      <header v-if="current !== 'profile' && current !== 'community'" class="top-bar">
+      <header
+        v-if="current !== 'profile' && current !== 'community' && current !== 'scan'"
+        class="top-bar"
+      >
         <div v-if="current === 'store'" class="store-search-wrap">
           <div class="store-search-top">
             <div class="store-search">
-              <svg class="search-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <svg
+                class="search-icon"
+                viewBox="0 0 24 24"
+                fill="none"
+                aria-hidden="true"
+              >
                 <circle cx="11" cy="11" r="6.5" />
                 <path d="m16 16 4 4" />
               </svg>
@@ -123,7 +185,13 @@ function confirmStoreSearch() {
                 @keydown.enter.prevent="confirmStoreSearch"
               />
             </div>
-            <button type="button" class="search-confirm-btn" @click="confirmStoreSearch">Go</button>
+            <button
+              type="button"
+              class="search-confirm-btn"
+              @click="confirmStoreSearch"
+            >
+              Go
+            </button>
             <div class="store-points-chip" aria-label="Current points">
               <span class="store-points-num">{{ museum.state.points }}</span>
               <span class="store-points-unit">pts</span>
@@ -132,11 +200,21 @@ function confirmStoreSearch() {
 
           <ul v-if="showStoreMatches" class="search-match-list">
             <li v-for="item in matchedProducts" :key="item.id">
-              <button type="button" class="search-match-item" @mousedown.prevent="pickStoreProduct(item.name)">
-                <img :src="item.image" :alt="item.name" class="search-match-thumb" />
+              <button
+                type="button"
+                class="search-match-item"
+                @mousedown.prevent="pickStoreProduct(item.name)"
+              >
+                <img
+                  :src="item.image"
+                  :alt="item.name"
+                  class="search-match-thumb"
+                />
                 <span class="search-match-copy">
                   <span class="search-match-name">{{ item.name }}</span>
-                  <span class="search-match-meta">{{ item.price }} / {{ item.redeemPoints }} pts</span>
+                  <span class="search-match-meta"
+                    >{{ item.price }} / {{ item.redeemPoints }} pts</span
+                  >
                 </span>
               </button>
             </li>
@@ -147,7 +225,11 @@ function confirmStoreSearch() {
 
       <main
         class="main"
-        :class="{ 'main-profile': current === 'profile', 'main-community': current === 'community' }"
+        :class="{
+          'main-profile': current === 'profile',
+          'main-community': current === 'community',
+          'main-scan': current === 'scan',
+        }"
       >
         <KeepAlive>
           <component :is="ActiveView" @back="leaveProfile" />
@@ -160,30 +242,67 @@ function confirmStoreSearch() {
           :key="t.key"
           type="button"
           class="tab"
-          :class="{ active: current === t.key, 'tab-profile': t.key === 'profile' }"
+          :class="{
+            active: current === t.key,
+            'tab-profile': t.key === 'profile',
+          }"
           :aria-current="current === t.key ? 'page' : undefined"
           :aria-label="t.label"
           @click="switchTab(t.key)"
         >
-          <svg v-if="t.key === 'home'" class="tab-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <svg
+            v-if="t.key === 'home'"
+            class="tab-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
             <path d="M4 11.5L12 5l8 6.5V20H4v-8.5Z" />
             <path d="M9.5 20v-5h5v5" />
           </svg>
-          <svg v-else-if="t.key === 'scan'" class="tab-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <path d="M8 4H5a1 1 0 0 0-1 1v3M16 4h3a1 1 0 0 1 1 1v3M8 20H5a1 1 0 0 1-1-1v-3M16 20h3a1 1 0 0 0 1-1v-3" />
+          <svg
+            v-else-if="t.key === 'scan'"
+            class="tab-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
+            <path
+              d="M8 4H5a1 1 0 0 0-1 1v3M16 4h3a1 1 0 0 1 1 1v3M8 20H5a1 1 0 0 1-1-1v-3M16 20h3a1 1 0 0 0 1-1v-3"
+            />
             <rect x="8" y="8" width="8" height="8" rx="1.5" />
           </svg>
-          <img v-else-if="t.key === 'profile'" class="tab-avatar" :src="avatarImg" alt="" aria-hidden="true" />
-          <svg v-else-if="t.key === 'store'" class="tab-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <img
+            v-else-if="t.key === 'profile'"
+            class="tab-avatar"
+            :src="avatarImg"
+            alt=""
+            aria-hidden="true"
+          />
+          <svg
+            v-else-if="t.key === 'store'"
+            class="tab-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
             <path d="M5 8h14l-1 11H6L5 8Z" />
             <path d="M8 8a4 4 0 1 1 8 0" />
           </svg>
-          <svg v-else class="tab-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+          <svg
+            v-else
+            class="tab-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            aria-hidden="true"
+          >
             <circle cx="8.2" cy="9" r="2.3" />
             <circle cx="15.8" cy="9" r="2.3" />
             <path d="M3.8 18a4.4 4.4 0 0 1 8.8 0M11.4 18a4.4 4.4 0 0 1 8.8 0" />
           </svg>
-          <span v-if="t.key !== 'profile'" class="tab-label">{{ t.label }}</span>
+          <span v-if="t.key !== 'profile'" class="tab-label">{{
+            t.label
+          }}</span>
         </button>
       </nav>
 
@@ -379,6 +498,12 @@ function confirmStoreSearch() {
 
 .main.main-community {
   overflow: hidden;
+  padding: 0 0 calc(var(--mq-nav-h) + var(--mq-safe-bottom));
+}
+
+.main.main-scan {
+  overflow: hidden;
+  padding: 0;
 }
 
 .tab-bar {
