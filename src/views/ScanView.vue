@@ -3,6 +3,7 @@ import {
   ref,
   reactive,
   inject,
+  onMounted,
   onActivated,
   onDeactivated,
   onUnmounted,
@@ -78,6 +79,12 @@ async function startCamera() {
   if (!navigator.mediaDevices?.getUserMedia) {
     cameraError.value =
       "当前浏览器不支持摄像头（需较新 Chrome / Safari / 微信内置浏览器等）";
+    return;
+  }
+
+  if (!window.isSecureContext) {
+    cameraError.value =
+      "当前页面不是安全上下文，摄像头只能在 HTTPS 或 localhost 下使用";
     return;
   }
 
@@ -174,6 +181,10 @@ async function retryCamera() {
 }
 
 onActivated(() => {
+  startCamera();
+});
+
+onMounted(() => {
   startCamera();
 });
 

@@ -75,6 +75,56 @@ const initialArtifacts = [
     points: 24,
     modelGlb: '/models/GeledeHelmetMask.glb',
   },
+  {
+    id: 'buddha-preaching',
+    name: '说法佛像',
+    hallId: 'h1',
+    hallName: '古代雕塑',
+    story:
+      '佛陀作说法印的形象常用于表现讲经弘法的庄严时刻，衣纹处理、手势组合与面部神情共同传达宁静与教化意味。此类造像也反映出不同地区佛教艺术在材质、比例与风格上的融合演变。',
+    points: 26,
+    modelGlb: '/models/buddha_preaching.glb',
+  },
+  {
+    id: 'crying-cow-sculpture',
+    name: '哭泣母牛雕塑',
+    hallId: 'h1',
+    hallName: '古代雕塑',
+    story:
+      '动物雕塑常被赋予情绪化表达，用夸张的眼部、头部姿态与身体体量强化观看者的共情体验。这件作品以母牛形象传递哀悼、守护或献祭相关的文化意涵，也展现了雕塑对生命张力的捕捉。',
+    points: 19,
+    modelGlb: '/models/crying_cow_sculpture.glb',
+  },
+  {
+    id: 'fish-pond',
+    name: '鱼池模型',
+    hallId: 'h2',
+    hallName: '园景与器物',
+    story:
+      '鱼池题材常见于园林、器物装饰与生活场景再现之中，既体现古人对自然生境的观察，也寄托了富足、生机与水域秩序的想象。池体结构与鱼群布局能帮助我们理解古代空间营造与审美趣味。',
+    points: 17,
+    modelGlb: '/models/fish-pond.glb',
+  },
+  {
+    id: 'isis-serqet-figure',
+    name: '伊西斯-塞尔凯特女神残像',
+    hallId: 'h1',
+    hallName: '古代雕塑',
+    story:
+      '这类残损的女神雕像虽不完整，却依然保留了古埃及宗教图像的重要线索。姿态、冠饰与残存轮廓可帮助研究者辨识神格与功能，也让观众看到文物在漫长时间中经历的断裂、流转与再发现。',
+    points: 23,
+    modelGlb: '/models/fragmentary_figure_of_the_goddess_isis-serqet.glb',
+  },
+  {
+    id: 'inscribed-tablet',
+    name: '铭文泥板',
+    hallId: 'h3',
+    hallName: '两河文明',
+    story:
+      '泥板文书是两河流域最重要的文字载体之一，常用于记录贸易、祭祀、行政与法律事务。表面的楔形文字压痕不仅保存了信息本身，也呈现出古代书写工具、记账制度与城市治理方式。',
+    points: 21,
+    modelGlb: '/models/tablet.glb',
+  },
 ]
 
 /** 示例坐标：苏州工业园区独墅湖一带（可改为真实馆址） */

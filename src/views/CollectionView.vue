@@ -21,6 +21,11 @@ const THEME_BY_ID = {
   "silver-gilt-bowl": "metalwork",
   "gelede-helmet-mask": "ritual",
   "urn-ingirsu": "mesopotamia",
+  "buddha-preaching": "sculpture",
+  "crying-cow-sculpture": "sculpture",
+  "fish-pond": "ceramics",
+  "isis-serqet-figure": "sculpture",
+  "inscribed-tablet": "mesopotamia",
 };
 
 function getThemeKey(item) {
