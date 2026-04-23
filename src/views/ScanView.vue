@@ -59,10 +59,6 @@ const artifactSuggestedQuestions = [
 const shouldShowChatSuggestions = computed(
   () => !chatMessages.value.some((m) => m.role === "user"),
 );
-const showArtifactPicker = ref(false);
-const selectedArtifact = computed(
-  () => state.artifacts.find((a) => a.id === selectedId.value) || state.artifacts[0] || null,
-);
 
 const videoRef = ref(null);
 const stream = ref(null);
@@ -442,7 +438,6 @@ watch(showResult, async (open) => {
 
 watch(selectedId, (nextId, prevId) => {
   if (!nextId || nextId === prevId) return;
-  showArtifactPicker.value = false;
   showVoicePicker.value = false;
   resetChatForArtifact();
   if (showChat.value) {
@@ -541,8 +536,6 @@ async function classifyCapturedImage(image) {
 }
 
 async function runScan() {
-  showArtifactPicker.value = false;
-
   if (scanBusy.value) return;
 
   scanBusy.value = true;
@@ -582,15 +575,6 @@ async function runScan() {
   } finally {
     scanBusy.value = false;
   }
-}
-
-function toggleArtifactPicker() {
-  showArtifactPicker.value = !showArtifactPicker.value;
-}
-
-function chooseArtifact(id) {
-  selectedId.value = id;
-  showArtifactPicker.value = false;
 }
 
 function closeResult() {
@@ -827,61 +811,6 @@ function toggleStorySpeech() {
       <span>Place the QR code or artifact in the frame, then tap Scan.</span>
     </p>
     <div class="scan-controls">
-      <div class="artifact-picker">
-        <button
-          type="button"
-          class="artifact-picker-trigger"
-          :aria-expanded="showArtifactPicker ? 'true' : 'false'"
-          @click="toggleArtifactPicker"
-        >
-          <span class="artifact-picker-icon" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="M3 9.5h18M5.2 9.5v8.8M9.4 9.5v8.8M14.6 9.5v8.8M18.8 9.5v8.8M2.5 19h19M4 6.9 12 4l8 2.9" />
-            </svg>
-          </span>
-          <span class="artifact-picker-copy">
-            <span class="artifact-picker-kicker">Selected artifact</span>
-            <span
-              class="artifact-picker-line"
-              :title="selectedArtifact ? `${selectedArtifact.name} - ${selectedArtifact.hallName}` : 'Select artifact'"
-            >
-              {{ selectedArtifact?.name || "Select artifact" }}
-              <template v-if="selectedArtifact?.hallName"> - {{ selectedArtifact.hallName }}</template>
-            </span>
-          </span>
-          <span class="artifact-picker-arrow" :class="{ open: showArtifactPicker }" aria-hidden="true">
-            <svg viewBox="0 0 24 24" fill="none">
-              <path d="m6 9 6 6 6-6" />
-            </svg>
-          </span>
-        </button>
-
-        <div class="artifact-menu-slot">
-          <button
-            v-if="showArtifactPicker"
-            type="button"
-            class="artifact-menu-backdrop"
-            aria-label="Close artifact list"
-            @click="showArtifactPicker = false"
-          />
-          <div v-if="showArtifactPicker" class="artifact-menu" role="listbox" aria-label="Artifact list">
-            <button
-              v-for="a in state.artifacts"
-              :key="a.id"
-              type="button"
-              class="artifact-option"
-              :class="{ selected: selectedId === a.id }"
-              @click="chooseArtifact(a.id)"
-            >
-              <span class="artifact-option-line" :title="`${a.name} - ${a.hallName}`">
-                {{ a.name }} - {{ a.hallName }}
-              </span>
-              <span v-if="selectedId === a.id" class="artifact-option-check" aria-hidden="true">&#10003;</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
       <button type="button" class="scan-btn" @click="runScan">
         <span class="scan-btn-icon" aria-hidden="true">
           <svg viewBox="0 0 24 24" fill="none">
@@ -1346,154 +1275,8 @@ function toggleStorySpeech() {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  min-height: clamp(220px, 30vh, 320px);
+  min-height: 0;
   z-index: 10;
-}
-
-.artifact-picker {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  flex: 1;
-}
-
-.artifact-picker-trigger {
-  width: 100%;
-  min-height: 62px;
-  border-radius: 16px;
-  border: 1px solid #d7be86;
-  background: #fbf8f2;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 14px;
-  text-align: left;
-  color: #5a4636;
-  box-shadow: 0 8px 16px rgba(92, 70, 44, 0.11);
-  position: relative;
-  z-index: 62;
-}
-
-.artifact-picker-icon {
-  width: 24px;
-  height: 24px;
-  color: #6f7d68;
-  flex: 0 0 24px;
-}
-
-.artifact-picker-icon svg {
-  width: 24px;
-  height: 24px;
-  stroke: currentColor;
-  stroke-width: 1.7;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.artifact-picker-copy {
-  min-width: 0;
-  flex: 1;
-}
-
-.artifact-picker-kicker {
-  display: block;
-  margin-bottom: 2px;
-  font-size: 0.66rem;
-  font-weight: 700;
-  letter-spacing: 0.04em;
-  color: #8a7a61;
-  text-transform: uppercase;
-}
-
-.artifact-picker-line {
-  display: block;
-  font-size: 0.92rem;
-  font-weight: 700;
-  color: #5a4636;
-  line-height: 1.25;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.artifact-picker-arrow {
-  width: 18px;
-  height: 18px;
-  color: #8f7c59;
-  transition: transform 180ms ease;
-}
-
-.artifact-picker-arrow.open {
-  transform: rotate(180deg);
-}
-
-.artifact-picker-arrow svg {
-  width: 18px;
-  height: 18px;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.artifact-menu-backdrop {
-  position: fixed;
-  inset: 0;
-  background: transparent;
-  z-index: 59;
-}
-
-.artifact-menu-slot {
-  position: relative;
-  min-height: clamp(120px, 18vh, 220px);
-}
-
-.artifact-menu {
-  position: relative;
-  max-height: min(320px, 100%);
-  overflow-y: auto;
-  background: #fbf8f2;
-  border: 1px solid #d7be86;
-  border-radius: 14px;
-  box-shadow: 0 10px 20px rgba(72, 54, 34, 0.12);
-  padding: 6px;
-  z-index: 60;
-}
-
-.artifact-option {
-  width: 100%;
-  min-height: 46px;
-  border-radius: 10px;
-  border: none;
-  background: transparent;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  padding: 9px 10px;
-  text-align: left;
-  color: #5a4636;
-}
-
-.artifact-option-line {
-  display: block;
-  font-size: 0.86rem;
-  font-weight: 600;
-  line-height: 1.25;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.artifact-option-check {
-  font-size: 0.84rem;
-  font-weight: 800;
-}
-
-.artifact-option.selected {
-  background: #7a8868;
-  color: #ffffff;
 }
 
 .scan-btn {
@@ -1501,13 +1284,13 @@ function toggleStorySpeech() {
   z-index: 61;
   min-height: 54px;
   border-radius: 14px;
-  background: linear-gradient(180deg, #d6b65f 0%, #c29d3a 100%);
-  color: #3b3b3b;
+  background: linear-gradient(180deg, #8ea27a 0%, #6f855c 100%);
+  color: #f7f3ec;
   font-size: 1rem;
   font-weight: 700;
   letter-spacing: 0.02em;
-  border: 1px solid #c7a753;
-  box-shadow: 0 8px 18px rgba(184, 141, 35, 0.28);
+  border: 1px solid #657a55;
+  box-shadow: 0 8px 18px rgba(63, 84, 52, 0.28);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2389,19 +2172,6 @@ function toggleStorySpeech() {
     gap: 10px;
   }
 
-  .artifact-picker-trigger {
-    min-height: 58px;
-    padding: 8px 12px;
-  }
-
-  .artifact-picker-line {
-    font-size: 0.86rem;
-  }
-
-  .artifact-menu-slot {
-    min-height: 96px;
-  }
-
   .scan-btn {
     min-height: 50px;
     font-size: 0.96rem;
@@ -2640,6 +2410,7 @@ function toggleStorySpeech() {
 .chat-send {
     width: 50px;
     min-height: 50px;
+}
 }
 </style>
 

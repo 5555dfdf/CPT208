@@ -176,7 +176,8 @@ function shortStory(text, limit = 86) {
 }
 
 .stats-card.expanded {
-  border-color: rgba(200, 155, 60, 0.88);
+  border-color: rgba(126, 151, 109, 0.72);
+  background: #f4f8f1;
 }
 
 .stats {
@@ -194,7 +195,7 @@ function shortStory(text, limit = 86) {
 }
 
 .stats.active {
-  background: #fcf8ef;
+  background: #eef5ea;
 }
 
 .theme-icon {
@@ -257,11 +258,11 @@ function shortStory(text, limit = 86) {
 }
 
 .ring-track {
-  stroke: #ece5d8;
+  stroke: #d8e3d1;
 }
 
 .ring-progress {
-  stroke: #c89b3c;
+  stroke: #7e976d;
   stroke-dasharray: 94.25;
   transition: stroke-dashoffset 0.35s ease;
 }
@@ -299,7 +300,7 @@ function shortStory(text, limit = 86) {
 
 .theme-inline {
   padding: 0 12px 12px;
-  background: #fcf8ef;
+  background: #eef5ea;
 }
 
 .list {
@@ -308,9 +309,9 @@ function shortStory(text, limit = 86) {
   display: flex;
   flex-direction: column;
   gap: 0;
-  border: 1px solid #e6dccb;
+  border: 1px solid rgba(126, 151, 109, 0.24);
   border-radius: 14px;
-  background: #fffdf9;
+  background: #f7fbf4;
 }
 
 .item {
