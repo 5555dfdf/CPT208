@@ -17,6 +17,9 @@ const selectedId = ref("porcelain-vase");
 const showResult = ref(false);
 const modelViewerError = ref("");
 const modelViewerLoading = ref(false);
+const scanBusy = ref(false);
+const scanError = ref("");
+const scanStatus = ref("");
 
 const showChat = ref(false);
 const chatSessionId = ref("");
@@ -290,14 +293,124 @@ function onModelError() {
     "Failed to load the 3D model. If this is deployed online, make sure the matching .glb file exists in public/models and rebuild the app.";
 }
 
+function extractModelAlias(modelGlb) {
+  const raw = String(modelGlb || "")
+    .split("/")
+    .pop()
+    ?.replace(/\.[^.]+$/, "");
+  return raw ? raw.trim() : "";
+}
+
+function createCompactAlias(label) {
+  const words = String(label || "")
+    .replace(/[()]/g, " ")
+    .replace(/[^a-zA-Z0-9]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  return words.map((word) => word[0].toUpperCase() + word.slice(1)).join("");
+}
+
+function buildRecognitionArtifacts() {
+  return state.artifacts.flatMap((artifact) => {
+    const aliases = [
+      artifact.name,
+      extractModelAlias(artifact.modelGlb),
+      createCompactAlias(artifact.name),
+    ].filter(Boolean);
+
+    return [...new Set(aliases)].map((label) => ({
+      id: artifact.id,
+      name: artifact.name,
+      label,
+    }));
+  });
+}
+
+function captureFrame() {
+  const video = videoRef.value;
+  if (!video || !stream.value) {
+    throw new Error("Camera is not ready yet.");
+  }
+
+  const width = video.videoWidth || 0;
+  const height = video.videoHeight || 0;
+  if (!width || !height) {
+    throw new Error("The camera frame is still loading. Please try again.");
+  }
+
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) {
+    throw new Error("Unable to capture the current frame.");
+  }
+
+  ctx.drawImage(video, 0, 0, width, height);
+  return canvas.toDataURL("image/jpeg", 0.92);
+}
+
+async function classifyCapturedImage(image) {
+  const response = await fetch(buildApiUrl("/api/agent/classify-image"), {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      image,
+      artifacts: buildRecognitionArtifacts(),
+    }),
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.error || `HTTP ${response.status}`);
+  }
+
+  return payload;
+}
+
 async function runScan() {
+  if (scanBusy.value) return;
+
+  scanBusy.value = true;
+  scanError.value = "";
+  scanStatus.value = "Capturing image...";
+
   const v = videoRef.value;
   if (v && stream.value) {
     v.play().catch(() => {});
   }
-  await import("@google/model-viewer");
-  scanArtifact(selectedId.value);
-  showResult.value = true;
+
+  try {
+    const image = captureFrame();
+    scanStatus.value = "Recognizing artifact...";
+    const result = await classifyCapturedImage(image);
+
+    if (!result?.artifactId) {
+      const raw = String(result?.raw || "").trim();
+      throw new Error(
+        raw
+          ? `The API returned "${raw}", but it could not be mapped to any artifact.`
+          : "The API did not return a recognizable artifact label.",
+      );
+    }
+
+    selectedId.value = result.artifactId;
+    scanStatus.value = result?.matchedLabel
+      ? `Recognized as ${result.matchedLabel}.`
+      : "Artifact recognized.";
+    await import("@google/model-viewer");
+    scanArtifact(result.artifactId);
+    showResult.value = true;
+  } catch (error) {
+    scanError.value = error?.message || "Failed to analyze the captured image.";
+    scanStatus.value = "";
+  } finally {
+    scanBusy.value = false;
+  }
 }
 
 function closeResult() {
@@ -486,15 +599,28 @@ function toggleStorySpeech() {
     </div>
 
     <div class="scan-controls">
-      <label class="field">
-        <select v-model="selectedId" class="select">
-          <option v-for="a in state.artifacts" :key="a.id" :value="a.id">
-            {{ a.name }} · {{ a.hallName }}
-          </option>
-        </select>
-      </label>
+<!--      <label class="field">-->
+<!--        <select v-model="selectedId" class="select">-->
+<!--          <option v-for="a in state.artifacts" :key="a.id" :value="a.id">-->
+<!--            {{ a.name }} · {{ a.hallName }}-->
+<!--          </option>-->
+<!--        </select>-->
+<!--      </label>-->
 
-      <button type="button" class="scan-btn" @click="runScan">Scan</button>
+      <button
+        type="button"
+        class="scan-btn"
+        :disabled="scanBusy || !stream"
+        @click="runScan"
+      >
+        {{ scanBusy ? "Analyzing..." : "Scan" }}
+      </button>
+      <p v-if="scanStatus" class="scan-feedback">
+        {{ scanStatus }}
+      </p>
+      <p v-if="scanError" class="scan-feedback error">
+        {{ scanError }}
+      </p>
     </div>
 
     <div
@@ -547,6 +673,9 @@ function toggleStorySpeech() {
         </div>
         <p class="sheet-sub">
           {{ currentArt().hallName }} · +{{ currentArt().points }} pts on first scan
+        </p>
+        <p v-if="scanStatus" class="sheet-recognition">
+          {{ scanStatus }}
         </p>
 
         <div v-if="currentArt().modelGlb" class="model-block">
@@ -832,6 +961,24 @@ function toggleStorySpeech() {
   box-shadow: 0 4px 20px rgba(201, 162, 39, 0.35);
 }
 
+.scan-btn:disabled {
+  opacity: 0.6;
+  box-shadow: none;
+}
+
+.scan-feedback {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  text-align: center;
+  color: #5d503d;
+  text-shadow: 0 1px 6px rgba(250, 243, 233, 0.55);
+}
+
+.scan-feedback.error {
+  color: #b55c4d;
+}
+
 .sheet {
   position: fixed;
   inset: 0;
@@ -935,6 +1082,13 @@ function toggleStorySpeech() {
   font-size: 0.85rem;
   color: var(--mq-accent);
   margin-bottom: 12px;
+}
+
+.sheet-recognition {
+  margin-top: -4px;
+  margin-bottom: 12px;
+  font-size: 0.8rem;
+  color: var(--mq-text-muted);
 }
 
 .model-block {
