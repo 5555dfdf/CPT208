@@ -1498,6 +1498,9 @@ onUnmounted(() => {
   .route-chat-foot {
     padding: 10px 10px max(10px, var(--mq-safe-bottom));
     gap: 8px;
+    position: sticky;
+    bottom: 0;
+    z-index: 4;
   }
 
   .route-chat-input {
@@ -1881,20 +1884,29 @@ onUnmounted(() => {
 @media (max-width: 430px) {
   .route-chat-sheet {
     padding: 8px;
-    padding-bottom: max(8px, var(--mq-safe-bottom));
+    padding-bottom: 0;
+    align-items: stretch;
+  }
+
+  .route-chat-sheet.fullscreen {
+    align-items: stretch;
+    justify-content: flex-start;
+    padding: 0;
   }
 
   .route-chat-panel {
     max-width: none;
-    height: auto;
-    max-height: calc(var(--mq-vh, 1vh) * 100 - 16px - var(--mq-safe-bottom));
-    border-radius: 16px;
+    height: calc(var(--mq-vh, 1vh) * 100);
+    max-height: none;
+    border-radius: 0;
   }
 
   .route-chat-panel.fullscreen {
-    width: 100vw;
-    max-width: 100vw;
+    width: 100%;
+    max-width: none;
     height: calc(var(--mq-vh, 1vh) * 100);
+    max-height: none;
+    border-radius: 0;
   }
 
   .route-chat-head {
