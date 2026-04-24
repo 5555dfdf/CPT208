@@ -577,6 +577,35 @@ async function runScan() {
   }
 }
 
+async function runMockScan() {
+  if (scanBusy.value) return;
+
+  const art = currentArt() || state.artifacts[0];
+  if (!art) {
+    scanError.value = "No artifact available for mock scan.";
+    return;
+  }
+
+  scanBusy.value = true;
+  scanError.value = "";
+  scanStatus.value = "Simulating recognition...";
+
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 520));
+    selectedId.value = art.id;
+    scanStatus.value = `Mock recognized as ${art.name}.`;
+    await import("@google/model-viewer");
+    scanArtifact(art.id);
+    resetChatForArtifact();
+    showResult.value = true;
+  } catch (error) {
+    scanError.value = error?.message || "Mock scan failed.";
+    scanStatus.value = "";
+  } finally {
+    scanBusy.value = false;
+  }
+}
+
 function closeResult() {
   showResult.value = false;
 }
@@ -818,6 +847,14 @@ function toggleStorySpeech() {
           </svg>
         </span>
         <span>{{ scanBusy ? "Analyzing..." : "Scan" }}</span>
+      </button>
+      <button type="button" class="scan-btn scan-btn-mock" :disabled="scanBusy" @click="runMockScan">
+        <span class="scan-btn-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M6 12h12M12 6v12" />
+          </svg>
+        </span>
+        <span>{{ scanBusy ? "Working..." : "Mock Scan" }}</span>
       </button>
       <p v-if="scanStatus" class="scan-feedback">
         {{ scanStatus }}
@@ -1317,6 +1354,13 @@ function toggleStorySpeech() {
 .scan-btn:disabled {
   opacity: 0.6;
   box-shadow: none;
+}
+
+.scan-btn-mock {
+  background: #f2f7ef;
+  color: #4f5f4a;
+  border-color: #bfd0b5;
+  box-shadow: 0 6px 14px rgba(95, 122, 86, 0.12);
 }
 
 .scan-feedback {
