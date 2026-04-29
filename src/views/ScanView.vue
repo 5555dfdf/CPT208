@@ -1,5 +1,6 @@
 ﻿<script setup>
 import {
+  computed,
   ref,
   reactive,
   inject,
@@ -11,9 +12,10 @@ import {
   watch,
 } from "vue";
 import { buildApiUrl, streamFetch } from "@/utils/api";
+import modelRotateBadge from "@/assets/model-rotate-badge.png";
 
 const { state, scanArtifact } = inject("museum");
-const selectedId = ref("porcelain-vase");
+const selectedId = ref("dragon-motif-bowl");
 const showResult = ref(false);
 const modelViewerError = ref("");
 const modelViewerLoading = ref(false);
@@ -22,6 +24,7 @@ const scanError = ref("");
 const scanStatus = ref("");
 
 const showChat = ref(false);
+const chatArtifactId = ref("");
 const chatSessionId = ref("");
 const chatInput = ref("");
 const chatSending = ref(false);
@@ -29,6 +32,33 @@ const chatError = ref("");
 const chatMessages = ref([]);
 const chatBodyRef = ref(null);
 let chatScrollRaf = 0;
+
+const artifactSuggestedQuestions = [
+  {
+    key: "function",
+    text: "What was it used for?",
+    prompt: "What was this artifact used for in daily life or rituals?",
+  },
+  {
+    key: "history",
+    text: "When is it from?",
+    prompt: "Which historical period does this artifact belong to, and why is that period important?",
+  },
+  {
+    key: "craft",
+    text: "How was it made?",
+    prompt: "How was this artifact made? Please explain the materials and craftsmanship in simple terms.",
+  },
+  {
+    key: "meaning",
+    text: "What does it symbolize?",
+    prompt: "What cultural meaning or symbolism does this artifact carry?",
+  },
+];
+
+const shouldShowChatSuggestions = computed(
+  () => !chatMessages.value.some((m) => m.role === "user"),
+);
 
 const videoRef = ref(null);
 const stream = ref(null);
@@ -40,10 +70,43 @@ const storySpeaking = ref(false);
 const storySpeechError = ref("");
 const storyVoices = ref([]);
 const selectedVoiceURI = ref(localStorage.getItem("mq_story_voice_uri") || "");
+const showVoicePicker = ref(false);
+const voiceSearch = ref("");
 let storyUtter = null;
+let voiceChangeHandler = null;
 
-/** 递增以作废进行中的 getUserMedia（快速切走 Tab 时避免把旧流绑回 video） */
+/** Incrementing token used to ignore stale getUserMedia calls during fast tab switches. */
 let cameraEpoch = 0;
+
+const onInputFocus = () => {
+  nextTick(() => {
+    if (chatBodyRef.value) {
+      chatBodyRef.value.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
+  });
+};
+
+const VOICE_LANGUAGE_PRESETS = [
+  { code: "en-US", label: "English (US)", country: "US", recommended: true },
+  { code: "en-GB", label: "English (UK)", country: "GB", recommended: true },
+];
+
+function countryToFlagEmoji(countryCode) {
+  const code = String(countryCode || "").trim().toUpperCase();
+  if (!/^[A-Z]{2}$/.test(code)) return "🌐";
+  const base = 0x1f1e6;
+  const a = "A".charCodeAt(0);
+  return String.fromCodePoint(
+    base + (code.charCodeAt(0) - a),
+    base + (code.charCodeAt(1) - a),
+  );
+}
+
+function countryToFlagIcon(countryCode) {
+  const code = String(countryCode || "").trim().toLowerCase();
+  if (!/^[a-z]{2}$/.test(code)) return "";
+  return `https://flagcdn.com/w40/${code}.png`;
+}
 
 function stopCamera() {
   cameraEpoch++;
@@ -150,7 +213,7 @@ async function startCamera() {
         try {
           await el.play();
         } catch {
-          /* 部分浏览器需用户手势，扫描按钮可再次触发 play */
+          /* ignore autoplay block */
         }
       }
       if (epoch !== cameraEpoch) {
@@ -189,6 +252,8 @@ onActivated(() => {
 
 onMounted(() => {
   startCamera();
+  bindVoiceChangeListener();
+  loadStoryVoices();
 });
 
 onDeactivated(() => {
@@ -198,6 +263,7 @@ onDeactivated(() => {
 onUnmounted(() => {
   stopCamera();
   stopStorySpeech();
+  unbindVoiceChangeListener();
   if (chatScrollRaf) {
     cancelAnimationFrame(chatScrollRaf);
     chatScrollRaf = 0;
@@ -216,13 +282,37 @@ function scheduleChatScrollToBottom() {
 
 function loadStoryVoices() {
   if (typeof window === "undefined" || !window.speechSynthesis?.getVoices)
-    return;
+    return [];
   const vs = window.speechSynthesis.getVoices() || [];
   storyVoices.value = vs;
-  if (!selectedVoiceURI.value && vs.length) {
+  if (!vs.length) return vs;
+
+  const selectedExists = selectedVoiceURI.value
+    ? vs.some((v) => v.voiceURI === selectedVoiceURI.value)
+    : false;
+
+  if (!selectedExists) {
     const best = pickDefaultEnglishVoice(vs);
     if (best?.voiceURI) selectedVoiceURI.value = best.voiceURI;
   }
+
+  return vs;
+}
+
+function bindVoiceChangeListener() {
+  if (typeof window === "undefined" || !window.speechSynthesis) return;
+  if (voiceChangeHandler) return;
+  voiceChangeHandler = () => {
+    loadStoryVoices();
+  };
+  window.speechSynthesis.addEventListener("voiceschanged", voiceChangeHandler);
+}
+
+function unbindVoiceChangeListener() {
+  if (typeof window === "undefined" || !window.speechSynthesis || !voiceChangeHandler)
+    return;
+  window.speechSynthesis.removeEventListener("voiceschanged", voiceChangeHandler);
+  voiceChangeHandler = null;
 }
 
 function pickDefaultEnglishVoice(vs) {
@@ -260,10 +350,74 @@ function pickDefaultEnglishVoice(vs) {
   return [...pool].sort((a, b) => score(b) - score(a))[0] || null;
 }
 
+function findBestVoiceForLang(langCode) {
+  const target = String(langCode || "").toLowerCase();
+  const voices = storyVoices.value || [];
+  if (!target || !voices.length) return null;
+
+  const exact = voices.find((v) => String(v.lang || "").toLowerCase() === target);
+  if (exact) return exact;
+
+  const startsWith = voices.find((v) => String(v.lang || "").toLowerCase().startsWith(target));
+  if (startsWith) return startsWith;
+
+  const base = target.split("-")[0];
+  if (!base) return null;
+  return voices.find((v) => String(v.lang || "").toLowerCase().startsWith(base)) || null;
+}
+
+const availableVoiceOptions = computed(() =>
+  VOICE_LANGUAGE_PRESETS.map((preset) => {
+    const voice = findBestVoiceForLang(preset.code);
+    return {
+      ...preset,
+      flag: countryToFlagEmoji(preset.country),
+      flagIcon: countryToFlagIcon(preset.country),
+      voice,
+    };
+  }).filter((item) => !!item.voice),
+);
+
+const selectedVoiceOption = computed(() => {
+  const uri = selectedVoiceURI.value;
+  return availableVoiceOptions.value.find((item) => item.voice?.voiceURI === uri) || null;
+});
+
+const filteredVoiceOptions = computed(() => {
+  const q = voiceSearch.value.trim().toLowerCase();
+  if (!q) return availableVoiceOptions.value;
+  return availableVoiceOptions.value.filter((item) => {
+    const voiceName = String(item.voice?.name || "").toLowerCase();
+    return (
+      item.label.toLowerCase().includes(q) ||
+      String(item.code || "").toLowerCase().includes(q) ||
+      voiceName.includes(q)
+    );
+  });
+});
+
+const recommendedVoiceOptions = computed(() =>
+  filteredVoiceOptions.value.filter((item) => item.recommended),
+);
+
+function toggleVoicePicker() {
+  if (!showVoicePicker.value) {
+    loadStoryVoices();
+  }
+  showVoicePicker.value = !showVoicePicker.value;
+}
+
+function selectVoice(uri) {
+  selectedVoiceURI.value = uri || "";
+  onVoiceChange();
+  showVoicePicker.value = false;
+}
+
 watch(showResult, async (open) => {
   if (!open) {
     modelViewerError.value = "";
     modelViewerLoading.value = false;
+    showVoicePicker.value = false;
     stopStorySpeech();
     if (videoRef.value && stream.value) {
       try {
@@ -279,6 +433,15 @@ watch(showResult, async (open) => {
       modelViewerError.value = "";
       modelViewerLoading.value = true;
     }
+  }
+});
+
+watch(selectedId, (nextId, prevId) => {
+  if (!nextId || nextId === prevId) return;
+  showVoicePicker.value = false;
+  resetChatForArtifact();
+  if (showChat.value) {
+    showChat.value = false;
   }
 });
 
@@ -404,9 +567,39 @@ async function runScan() {
       : "Artifact recognized.";
     await import("@google/model-viewer");
     scanArtifact(result.artifactId);
+    resetChatForArtifact();
     showResult.value = true;
   } catch (error) {
     scanError.value = error?.message || "Failed to analyze the captured image.";
+    scanStatus.value = "";
+  } finally {
+    scanBusy.value = false;
+  }
+}
+
+async function runMockScan() {
+  if (scanBusy.value) return;
+
+  const art = currentArt() || state.artifacts[0];
+  if (!art) {
+    scanError.value = "No artifact available for mock scan.";
+    return;
+  }
+
+  scanBusy.value = true;
+  scanError.value = "";
+  scanStatus.value = "Simulating recognition...";
+
+  try {
+    await new Promise((resolve) => setTimeout(resolve, 520));
+    selectedId.value = art.id;
+    scanStatus.value = `Mock recognized as ${art.name}.`;
+    await import("@google/model-viewer");
+    scanArtifact(art.id);
+    resetChatForArtifact();
+    showResult.value = true;
+  } catch (error) {
+    scanError.value = error?.message || "Mock scan failed.";
     scanStatus.value = "";
   } finally {
     scanBusy.value = false;
@@ -419,14 +612,34 @@ function closeResult() {
 
 const currentArt = () => state.artifacts.find((a) => a.id === selectedId.value);
 
+function resetChatForArtifact() {
+  const art = currentArt();
+  const nextArtifactId = art?.id || "";
+  if (!nextArtifactId) return;
+  if (chatArtifactId.value === nextArtifactId) return;
+
+  chatArtifactId.value = nextArtifactId;
+  chatSessionId.value = "";
+  chatInput.value = "";
+  chatError.value = "";
+  chatMessages.value = [
+    {
+      role: "assistant",
+      content:
+        "Choose a quick suggestion below, or ask about function, history, craftsmanship, or meaning.",
+    },
+  ];
+}
+
 function openChat() {
+  resetChatForArtifact();
   chatError.value = "";
   showChat.value = true;
   if (!chatMessages.value.length && currentArt()) {
     chatMessages.value = [
       {
         role: "assistant",
-        content: `You can ask me about ${currentArt().name}'s function, history, craftsmanship, or cultural meaning.`,
+        content: "Choose a quick suggestion below, or ask about function, history, craftsmanship, or meaning.",
       },
     ];
   }
@@ -437,8 +650,10 @@ function closeChat() {
   showChat.value = false;
 }
 
-async function sendChat() {
-  const q = chatInput.value.trim();
+async function sendChat(forcedQuestion = "") {
+  const safeForcedQuestion =
+    typeof forcedQuestion === "string" ? forcedQuestion : "";
+  const q = String(safeForcedQuestion || chatInput.value.trim()).trim();
   if (!q || chatSending.value) return;
 
   const art = currentArt();
@@ -448,7 +663,7 @@ async function sendChat() {
   chatInput.value = "";
   scheduleChatScrollToBottom();
 
-  // 插入占位的 assistant 消息，流式接收时逐字符追加
+  // Insert a placeholder assistant message and progressively append streamed chunks.
   const aiMsg = reactive({ role: "assistant", content: "", streaming: true });
   chatMessages.value.push(aiMsg);
   scheduleChatScrollToBottom();
@@ -472,11 +687,17 @@ async function sendChat() {
             : undefined,
           question: q,
         },
-        mode: "sse", // 若后端是 SSE，则改为 'sse'
+        mode: "sse",
       },
       (ch) => {
         aiMsg.content += ch;
         scheduleChatScrollToBottom();
+      },
+      (eventName, payload) => {
+        if (eventName !== "session") return;
+        const sid =
+          typeof payload === "string" ? payload : payload?.sessionId || "";
+        if (sid) chatSessionId.value = sid;
       },
     );
   } catch (e) {
@@ -489,6 +710,11 @@ async function sendChat() {
     chatSending.value = false;
     scheduleChatScrollToBottom();
   }
+}
+
+function sendQuickArtifactIntent(intent) {
+  if (!intent || chatSending.value) return;
+  sendChat(intent.prompt);
 }
 
 function stopStorySpeech() {
@@ -531,12 +757,21 @@ function toggleStorySpeech() {
   }
 
   stopStorySpeech();
+  const loadedVoices = loadStoryVoices();
   const u = new SpeechSynthesisUtterance(text);
-  u.lang = "en-US";
-  const v = storyVoices.value.find(
-    (x) => x.voiceURI === selectedVoiceURI.value,
-  );
-  if (v) u.voice = v;
+  const v =
+    (loadedVoices || []).find((x) => x.voiceURI === selectedVoiceURI.value) ||
+    pickDefaultEnglishVoice(loadedVoices || []);
+  if (v) {
+    u.voice = v;
+    u.lang = v.lang || "en-US";
+    if (selectedVoiceURI.value !== v.voiceURI) {
+      selectedVoiceURI.value = v.voiceURI;
+      onVoiceChange();
+    }
+  } else {
+    u.lang = "en-US";
+  }
   u.rate = 1;
   u.pitch = 1;
   u.volume = 1;
@@ -593,27 +828,33 @@ function toggleStorySpeech() {
           Retry
         </button>
       </div>
-      <p v-else class="camera-hint">
-        Place the QR code or artifact inside the frame and tap Scan.
-      </p>
     </div>
 
+    <p class="scan-tip">
+      <span class="scan-tip-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none">
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M12 10v5M12 7.2h.01" />
+        </svg>
+      </span>
+      <span>Place the QR code or artifact in the frame, then tap Scan.</span>
+    </p>
     <div class="scan-controls">
-<!--      <label class="field">-->
-<!--        <select v-model="selectedId" class="select">-->
-<!--          <option v-for="a in state.artifacts" :key="a.id" :value="a.id">-->
-<!--            {{ a.name }} · {{ a.hallName }}-->
-<!--          </option>-->
-<!--        </select>-->
-<!--      </label>-->
-
-      <button
-        type="button"
-        class="scan-btn"
-        :disabled="scanBusy || !stream"
-        @click="runScan"
-      >
-        {{ scanBusy ? "Analyzing..." : "Scan" }}
+      <button type="button" class="scan-btn" :disabled="scanBusy || !stream" @click="runScan">
+        <span class="scan-btn-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M4 8V5h3M20 8V5h-3M4 16v3h3M20 16v3h-3M7.5 12h9" />
+          </svg>
+        </span>
+        <span>{{ scanBusy ? "Analyzing..." : "Scan" }}</span>
+      </button>
+      <button type="button" class="scan-btn scan-btn-mock" :disabled="scanBusy" @click="runMockScan">
+        <span class="scan-btn-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none">
+            <path d="M6 12h12M12 6v12" />
+          </svg>
+        </span>
+        <span>{{ scanBusy ? "Working..." : "Mock Scan" }}</span>
       </button>
       <p v-if="scanStatus" class="scan-feedback">
         {{ scanStatus }}
@@ -622,7 +863,6 @@ function toggleStorySpeech() {
         {{ scanError }}
       </p>
     </div>
-
     <div
       v-if="showResult && currentArt()"
       class="sheet"
@@ -637,28 +877,69 @@ function toggleStorySpeech() {
         <div class="sheet-head">
           <h2 id="scan-title" class="sheet-title">{{ currentArt().name }}</h2>
           <div class="head-tools">
-            <label class="voice">
-              <span class="sr-only">Narration voice</span>
-              <select
-                v-model="selectedVoiceURI"
+            <div class="voice">
+              <button
+                type="button"
                 class="voice-select"
-                :disabled="!storyVoices.length"
-                @change="onVoiceChange"
-                @mousedown="loadStoryVoices"
-                @touchstart.passive="loadStoryVoices"
+                :disabled="!availableVoiceOptions.length"
+                :aria-expanded="showVoicePicker ? 'true' : 'false'"
+                @click="toggleVoicePicker"
               >
-                <option value="" disabled>
-                  {{ storyVoices.length ? "Choose voice" : "No voices available" }}
-                </option>
-                <option
-                  v-for="v in storyVoices"
-                  :key="v.voiceURI"
-                  :value="v.voiceURI"
-                >
-                  {{ v.name }} ({{ v.lang }})
-                </option>
-              </select>
-            </label>
+                <span class="voice-select-flag" aria-hidden="true">
+                  <img
+                    v-if="selectedVoiceOption?.flagIcon"
+                    :src="selectedVoiceOption.flagIcon"
+                    alt=""
+                  />
+                  <span v-else>{{ selectedVoiceOption?.flag || "\uD83C\uDF10" }}</span>
+                </span>
+                <span class="voice-select-label">
+                  {{ selectedVoiceOption?.label || "Choose language" }}
+                </span>
+                <span class="voice-select-caret" :class="{ open: showVoicePicker }" aria-hidden="true">&#9662;</span>
+              </button>
+
+              <button
+                v-if="showVoicePicker"
+                type="button"
+                class="voice-menu-backdrop"
+                aria-label="Close language list"
+                @click="showVoicePicker = false"
+              />
+              <div v-if="showVoicePicker" class="voice-menu">
+                <div class="voice-search">
+                  <span class="voice-search-icon" aria-hidden="true">&#128269;</span>
+                  <input
+                    v-model="voiceSearch"
+                    type="text"
+                    class="voice-search-input"
+                    placeholder="Search language"
+                  />
+                </div>
+
+                <p class="voice-section-title">Recommended</p>
+                <div class="voice-options">
+                  <button
+                    v-for="opt in recommendedVoiceOptions"
+                    :key="opt.code"
+                    type="button"
+                    class="voice-option"
+                    :class="{ selected: selectedVoiceURI === opt.voice.voiceURI }"
+                    @click="selectVoice(opt.voice.voiceURI)"
+                  >
+                    <span class="voice-option-flag" aria-hidden="true">
+                      <img v-if="opt.flagIcon" :src="opt.flagIcon" alt="" />
+                      <span v-else>{{ opt.flag }}</span>
+                    </span>
+                    <span class="voice-option-label">{{ opt.label }}</span>
+                    <span v-if="selectedVoiceURI === opt.voice.voiceURI" class="voice-option-check" aria-hidden="true">&#10003;</span>
+                  </button>
+                  <p v-if="!recommendedVoiceOptions.length" class="voice-empty">
+                    No matched voices
+                  </p>
+                </div>
+              </div>
+            </div>
 
             <button
               type="button"
@@ -672,7 +953,19 @@ function toggleStorySpeech() {
           </div>
         </div>
         <p class="sheet-sub">
-          {{ currentArt().hallName }} · +{{ currentArt().points }} pts on first scan
+          <span class="sheet-sub-hall">
+            <span class="sheet-sub-hall-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M4 8h16M6 8v9M10 8v9M14 8v9M18 8v9M3 19h18M2 21h20M12 3l9 4H3l9-4Z" />
+              </svg>
+            </span>
+            <span>{{ currentArt().hallName }}</span>
+          </span>
+          <span class="sheet-sub-dot" aria-hidden="true">&bull;</span>
+          <span class="sheet-sub-points">
+            <span aria-hidden="true">&#11088;</span>
+            <span>+{{ currentArt().points }} pts on first scan</span>
+          </span>
         </p>
         <p v-if="scanStatus" class="sheet-recognition">
           {{ scanStatus }}
@@ -683,6 +976,9 @@ function toggleStorySpeech() {
             Drag with one finger to rotate. Pinch with two fingers to zoom. Explore from the top and bottom.
           </p>
           <div class="model-viewer-wrap">
+            <span class="model-badge" aria-hidden="true">
+              <img :src="modelRotateBadge" alt="" />
+            </span>
             <div
               v-if="modelViewerLoading && !modelViewerError"
               class="model-loading"
@@ -716,17 +1012,33 @@ function toggleStorySpeech() {
           {{ storySpeechError }}
         </p>
         <div class="sheet-actions">
-          <button type="button" class="btn-secondary" @click="closeResult">
-            Close
+          <button type="button" class="btn-back" @click="closeResult">
+            <span class="action-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="m15.5 6.5-6 5.5 6 5.5M9.8 12h8.7" />
+              </svg>
+            </span>
+            <span>Back</span>
           </button>
-          <button type="button" class="btn-secondary" @click="openChat">
-            Ask AI
+          <button type="button" class="btn-guide" @click="openChat">
+            <span class="action-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M5 7.5a2.5 2.5 0 0 1 2.5-2.5h7a2.5 2.5 0 0 1 2.5 2.5v5A2.5 2.5 0 0 1 14.5 15H10l-3.5 3v-3H7.5A2.5 2.5 0 0 1 5 12.5v-5Z" />
+                <path d="M10.2 8.8h4.6M10.2 11.4h3.2" />
+                <path d="M18.4 4.8v3.2M16.8 6.4h3.2" />
+              </svg>
+            </span>
+            <span>Ask the Guide</span>
           </button>
         </div>
       </div>
     </div>
 
-    <div v-if="showChat" class="chat-sheet" @click.self="closeChat">
+    <div
+      v-if="showChat"
+      class="chat-sheet"
+      @click.self="closeChat"
+    >
       <div
         class="chat-panel"
         role="dialog"
@@ -735,26 +1047,67 @@ function toggleStorySpeech() {
       >
         <div class="chat-head">
           <div class="chat-title-wrap">
-            <h3 id="chat-title" class="chat-title">AI Guide</h3>
-            <p class="chat-sub">Current Artifact: {{ currentArt()?.name }}</p>
+            <span class="chat-brand" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M3 9.5h18M5.2 9.5v8.8M9.4 9.5v8.8M14.6 9.5v8.8M18.8 9.5v8.8M2.5 19h19M4 6.9 12 4l8 2.9" />
+                <path d="m12 11.2 4.8-2.5-2.6 4.9-4.8 2.5 2.6-4.9Z" />
+              </svg>
+            </span>
+            <h3 id="chat-title" class="chat-title">Artifact Guide</h3>
+            <p class="chat-sub">Context-aware museum object guidance</p>
+            <p class="chat-artifact-tag">Current artifact: {{ currentArt()?.name }}</p>
           </div>
-          <button type="button" class="chat-close" @click="closeChat">
-            <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-              <path d="M9 6l6 6-6 6" />
-            </svg>
-            <span class="sr-only">Back</span>
-          </button>
+          <div class="chat-head-actions">
+            <button type="button" class="chat-close" @click="closeChat">
+              Close
+            </button>
+          </div>
         </div>
 
-        <div ref="chatBodyRef" class="chat-body" aria-label="Conversation">
+        <div
+          ref="chatBodyRef"
+          class="chat-body"
+          :class="{ empty: shouldShowChatSuggestions }"
+          aria-label="Conversation"
+        >
           <div
             v-for="(m, idx) in chatMessages"
             :key="idx"
-            class="bubble"
+            class="message-row"
             :class="m.role === 'user' ? 'me' : 'ai'"
           >
-            {{ m.content }}
+            <span
+              v-if="m.role !== 'user'"
+              class="ai-avatar"
+              aria-hidden="true"
+            >
+              <svg viewBox="0 0 24 24" fill="none">
+                <path d="M3 9.5h18M5.2 9.5v8.8M9.4 9.5v8.8M14.6 9.5v8.8M18.8 9.5v8.8M2.5 19h19M4 6.9 12 4l8 2.9" />
+                <circle cx="12" cy="12" r="2.1" />
+              </svg>
+            </span>
+            <div class="chat-bubble" :class="m.role === 'user' ? 'me' : 'ai'">
+              {{ m.content }}
+            </div>
           </div>
+          <div
+            v-if="shouldShowChatSuggestions"
+            class="chat-suggest-row"
+            aria-label="Suggested questions"
+          >
+            <button
+              v-for="intent in artifactSuggestedQuestions"
+              :key="intent.key"
+              type="button"
+              class="chat-suggest-chip"
+              @click="sendQuickArtifactIntent(intent)"
+            >
+              {{ intent.text }}
+            </button>
+          </div>
+          <p v-if="shouldShowChatSuggestions" class="chat-empty-hint">
+            Choose a suggestion to start exploring this artifact.
+          </p>
           <p v-if="chatError" class="chat-error">{{ chatError }}</p>
         </div>
 
@@ -763,15 +1116,28 @@ function toggleStorySpeech() {
             v-model="chatInput"
             class="chat-input"
             type="text"
-            placeholder="Ask something, for example: What was it used for?"
+            placeholder="Ask about this artifact..."
             :disabled="chatSending"
+            @focus="onInputFocus"
           />
           <button
             type="submit"
             class="chat-send"
             :disabled="chatSending || !chatInput.trim()"
+            :aria-label="chatSending ? 'Sending' : 'Send message'"
           >
-            {{ chatSending ? "Sending..." : "Send" }}
+            <svg
+              v-if="!chatSending"
+              class="chat-send-icon"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                d="M3.4 11.2L19.6 3.3C20.3 3 21.1 3.6 20.9 4.4L18.1 19.7C17.9 20.6 16.8 20.9 16.2 20.2L12.1 15.6L8.1 18.8C7.5 19.3 6.6 18.8 6.7 18L7.2 13.6L3.6 12.6C2.8 12.4 2.7 11.6 3.4 11.2Z"
+                fill="currentColor"
+              />
+            </svg>
+            <span v-else class="chat-send-spinner" aria-hidden="true" />
           </button>
         </form>
       </div>
@@ -784,24 +1150,24 @@ function toggleStorySpeech() {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 0;
-  height: 100%;
-  min-height: 0;
-  padding-bottom: 0;
+  gap: 12px;
+  min-height: calc(var(--mq-vh, 1vh) * 100);
+  padding: 14px 16px calc(var(--mq-nav-h) + var(--mq-safe-bottom) + 18px);
   box-sizing: border-box;
+  background: #f7f4ee;
 }
 
 .camera {
   position: relative;
-  flex: 0 0 min(33vh, 360px);
-  width: calc(100% - 44px);
-  max-width: 420px;
-  min-height: 260px;
-  margin: 42px auto 0;
-  border-radius: var(--mq-radius);
-  background: #faf3e9;
-  border: 1px solid var(--mq-border);
+  width: min(100%, 430px);
+  margin: 2px auto 0;
+  min-height: 228px;
+  aspect-ratio: 16 / 9;
+  border-radius: 24px;
+  background: linear-gradient(160deg, #3f352f 0%, #2c2522 58%, #1f1a18 100%);
+  border: 1px solid #d7be86;
   overflow: hidden;
+  box-shadow: 0 12px 26px rgba(72, 54, 34, 0.2);
 }
 
 .video {
@@ -811,9 +1177,10 @@ function toggleStorySpeech() {
   height: 100%;
   object-fit: cover;
   transform: scaleX(1);
+  opacity: 0.94;
 }
 
-/* 前置摄像头镜像，更符合自拍习惯；后置保持正常 */
+/* Mirror only when front-facing camera is used. */
 .video.mirror {
   transform: scaleX(-1);
 }
@@ -827,66 +1194,89 @@ function toggleStorySpeech() {
   justify-content: center;
   background: radial-gradient(
     ellipse at center,
-    transparent 30%,
-    rgba(250, 243, 233, 0.45) 100%
+    rgba(0, 0, 0, 0.06) 0%,
+    rgba(0, 0, 0, 0.22) 100%
   );
 }
 
 .camera-frame {
   position: relative;
-  width: 72%;
-  max-width: 260px;
-  aspect-ratio: 3 / 4;
-  border: 1px dashed rgba(255, 255, 255, 0.2);
-  border-radius: 12px;
+  width: min(84%, 346px);
+  aspect-ratio: 16 / 10;
+  border: 1px solid rgba(215, 190, 134, 0.36);
+  border-radius: 18px;
 }
 
 .corner {
   position: absolute;
-  width: 20px;
-  height: 20px;
-  border-color: var(--mq-accent);
+  width: 22px;
+  height: 22px;
+  border-color: #c9a13b;
   border-style: solid;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.3));
 }
+
 .corner.tl {
   top: -1px;
   left: -1px;
   border-width: 3px 0 0 3px;
-  border-radius: 8px 0 0 0;
+  border-radius: 11px 0 0 0;
 }
+
 .corner.tr {
   top: -1px;
   right: -1px;
   border-width: 3px 3px 0 0;
-  border-radius: 0 8px 0 0;
+  border-radius: 0 11px 0 0;
 }
+
 .corner.bl {
   bottom: -1px;
   left: -1px;
   border-width: 0 0 3px 3px;
-  border-radius: 0 0 0 8px;
+  border-radius: 0 0 0 11px;
 }
+
 .corner.br {
   bottom: -1px;
   right: -1px;
   border-width: 0 3px 3px 0;
-  border-radius: 0 0 8px 0;
+  border-radius: 0 0 11px 0;
 }
 
-.camera-hint {
-  position: absolute;
-  bottom: 12px;
-  left: 12px;
-  right: 12px;
-  text-align: center;
-  font-size: 0.75rem;
-  color: rgba(232, 235, 233, 0.9);
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.8);
-  pointer-events: none;
+.scan-tip {
+  width: min(100%, 430px);
+  margin: 4px auto 2px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 2px;
+  color: #6f7d68;
+  font-size: 0.86rem;
+  line-height: 1.45;
+}
+
+.scan-tip-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #8e9b86;
+  flex: 0 0 auto;
+}
+
+.scan-tip-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .camera-status {
-  position: fixed;
+  position: absolute;
   inset: 0;
   display: flex;
   flex-direction: column;
@@ -894,76 +1284,83 @@ function toggleStorySpeech() {
   justify-content: center;
   gap: 12px;
   padding: 16px;
-  background: rgba(250, 243, 233, 0.92);
+  background: rgba(35, 29, 24, 0.72);
   font-size: 0.88rem;
-  color: var(--mq-text-muted);
+  color: #f7f0df;
   text-align: center;
-  z-index: 20;
+  z-index: 4;
 }
 
 .camera-status.error {
-  color: var(--mq-text);
+  color: #f8f1e6;
 }
 
 .retry-btn {
-  min-height: 44px;
+  min-height: 42px;
   padding: 0 20px;
-  border-radius: 10px;
-  background: var(--mq-accent-soft);
-  color: var(--mq-accent);
-  font-weight: 600;
-  border: 1px solid rgba(201, 162, 39, 0.4);
-}
-
-.field {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+  border-radius: 12px;
+  background: #fbf8f2;
+  color: #6f7d68;
+  font-weight: 700;
+  border: 1px solid #d7be86;
 }
 
 .scan-controls {
-  position: fixed;
-  width: min(68%, 360px);
-  left: 50%;
-  transform: translateX(-50%);
-  bottom: calc(var(--mq-nav-h) + var(--mq-safe-bottom) + 46px);
+  position: relative;
+  width: min(100%, 430px);
+  margin: 2px auto 0;
   display: flex;
   flex-direction: column;
   gap: 12px;
-  z-index: 52;
-}
-
-.select {
-  min-height: var(--mq-tap-min);
-  padding: 0 14px;
-  border-radius: 10px;
-  background: rgba(250, 243, 233, 0.45);
-  border: 1px solid rgba(205, 188, 163, 0.6);
-  color: #3d352b;
-  appearance: none;
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%239aa8a2' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 14px center;
-  padding-right: 36px;
+  min-height: 0;
+  z-index: 10;
 }
 
 .scan-btn {
-  min-height: 52px;
-  border-radius: 12px;
-  background: linear-gradient(180deg, #d4b03a, var(--mq-accent));
-  color: #1a1508;
-  font-size: 1.05rem;
+  position: relative;
+  z-index: 61;
+  min-height: 54px;
+  border-radius: 14px;
+  background: linear-gradient(180deg, #d9e3d2 0%, #c8d6bf 100%);
+  color: #44533f;
+  font-size: 1rem;
   font-weight: 700;
-  letter-spacing: 0.08em;
-  box-shadow: 0 4px 20px rgba(201, 162, 39, 0.35);
+  letter-spacing: 0.02em;
+  border: 1px solid #adc19f;
+  box-shadow: 0 8px 18px rgba(95, 122, 86, 0.22);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.scan-btn-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.scan-btn-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
 }
 
 .scan-btn:disabled {
   opacity: 0.6;
   box-shadow: none;
+}
+
+.scan-btn-mock {
+  background: #f2f7ef;
+  color: #4f5f4a;
+  border-color: #bfd0b5;
+  box-shadow: 0 6px 14px rgba(95, 122, 86, 0.12);
 }
 
 .scan-feedback {
@@ -972,7 +1369,6 @@ function toggleStorySpeech() {
   line-height: 1.45;
   text-align: center;
   color: #5d503d;
-  text-shadow: 0 1px 6px rgba(250, 243, 233, 0.55);
 }
 
 .scan-feedback.error {
@@ -983,7 +1379,7 @@ function toggleStorySpeech() {
   position: fixed;
   inset: 0;
   z-index: 100;
-  background: rgba(250, 243, 233, 0.55);
+  background: rgba(247, 243, 236, 0.62);
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -994,13 +1390,14 @@ function toggleStorySpeech() {
 .sheet-panel {
   width: 100%;
   max-width: 440px;
-  max-height: 88vh;
+  max-height: calc(var(--mq-vh, 1vh) * 88);
   overflow: auto;
   border-radius: 18px 18px 14px 14px;
-  background: var(--mq-bg-elevated);
-  border: 1px solid var(--mq-border);
+  background: #f7f3ec;
+  border: 1px solid #d7be86;
   padding: 20px 18px 18px;
   -webkit-overflow-scrolling: touch;
+  box-shadow: 0 14px 30px rgba(88, 67, 43, 0.14);
 }
 
 .sheet-head {
@@ -1019,28 +1416,200 @@ function toggleStorySpeech() {
 }
 
 .voice {
+  position: relative;
   display: inline-flex;
   align-items: center;
 }
 
 .voice-select {
   min-height: 36px;
-  max-width: 150px;
-  padding: 0 34px 0 10px;
+  max-width: 168px;
+  padding: 0 10px;
   border-radius: 999px;
-  background: var(--mq-surface);
-  border: 1px solid var(--mq-border);
-  color: var(--mq-text-muted);
+  background: #f7f3ec;
+  border: 1px solid rgba(122, 136, 104, 0.48);
+  color: #3b3b3b;
   font-size: 0.78rem;
   font-weight: 600;
-  appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath fill='%239aa8a2' d='M1 1l5 5 5-5'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
+  display: inline-grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  text-align: left;
+}
+
+.voice-select-flag {
+  width: 22px;
+  height: 16px;
+  border-radius: 3px;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 0.92rem;
+  line-height: 1;
+}
+
+.voice-select-flag img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.voice-select-label {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.voice-select-caret {
+  font-size: 0.8rem;
+  color: #6f7d68;
+  transition: transform 0.2s ease;
+}
+
+.voice-select-caret.open {
+  transform: rotate(180deg);
 }
 
 .voice-select:disabled {
   opacity: 0.55;
+}
+
+.voice-menu {
+  position: fixed;
+  top: max(88px, calc(env(safe-area-inset-top) + 72px));
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(360px, calc(100vw - 24px));
+  max-height: min(70vh, 560px);
+  background: #fbf8f2;
+  border: 1px solid #d7be86;
+  border-radius: 14px;
+  box-shadow: 0 12px 24px rgba(72, 54, 34, 0.16);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  z-index: 140;
+}
+
+.voice-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  border: 0;
+  z-index: 130;
+}
+
+.voice-search {
+  min-height: 38px;
+  border: 1px solid rgba(122, 136, 104, 0.3);
+  border-radius: 12px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  background: #f7f3ec;
+}
+
+.voice-search-icon {
+  font-size: 0.9rem;
+  opacity: 0.74;
+}
+
+.voice-search-input {
+  width: 100%;
+  min-width: 0;
+  border: none;
+  outline: none;
+  background: transparent;
+  color: #3b3b3b;
+  font-size: 0.85rem;
+}
+
+.voice-search-input::placeholder {
+  color: #8a968f;
+}
+
+.voice-section-title {
+  margin: 10px 2px 6px;
+  color: #6f7d68;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.voice-options {
+  border: 1px solid rgba(215, 190, 134, 0.56);
+  border-radius: 10px;
+  overflow: hidden;
+  background: #f7f3ec;
+}
+
+.voice-option {
+  width: 100%;
+  min-height: 40px;
+  border: none;
+  border-bottom: 1px solid rgba(215, 190, 134, 0.38);
+  background: transparent;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 0 10px;
+  text-align: left;
+  color: #3b3b3b;
+  font-size: 0.9rem;
+}
+
+.voice-option:last-child {
+  border-bottom: none;
+}
+
+.voice-option.selected {
+  background: rgba(122, 136, 104, 0.2);
+}
+
+.voice-option-flag {
+  min-width: 24px;
+  width: 24px;
+  height: 16px;
+  border-radius: 3px;
+  overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  text-align: center;
+  font-size: 1rem;
+  line-height: 1;
+  font-family: "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif;
+}
+
+.voice-option-flag img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.voice-option-label {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.voice-option-check {
+  color: #5f744f;
+  font-weight: 800;
+}
+
+.voice-empty {
+  margin: 8px 10px;
+  color: #8a968f;
+  font-size: 0.82rem;
 }
 
 .sr-only {
@@ -1056,7 +1625,9 @@ function toggleStorySpeech() {
 }
 
 .sheet-title {
-  font-size: 1.25rem;
+  font-size: 1.32rem;
+  font-weight: 800;
+  color: #2f3e2f;
   margin-bottom: 0;
 }
 
@@ -1065,23 +1636,65 @@ function toggleStorySpeech() {
   min-height: 36px;
   padding: 0 12px;
   border-radius: 999px;
-  background: var(--mq-surface);
-  border: 1px solid var(--mq-border);
-  color: var(--mq-text-muted);
+  background: #f7f3ec;
+  border: 1px solid rgba(122, 136, 104, 0.48);
+  color: #2f4a32;
   font-size: 0.78rem;
   font-weight: 700;
 }
 
 .story-btn.on {
-  background: rgba(201, 162, 39, 0.18);
-  border-color: rgba(201, 162, 39, 0.35);
-  color: var(--mq-accent);
+  background: rgba(122, 136, 104, 0.16);
+  border-color: rgba(122, 136, 104, 0.35);
+  color: #2f4a32;
 }
 
 .sheet-sub {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
   font-size: 0.85rem;
-  color: var(--mq-accent);
+  color: #8c6b2e;
   margin-bottom: 12px;
+}
+
+.sheet-sub-hall {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: #8c6b2e;
+}
+
+.sheet-sub-hall-icon {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: #9a7222;
+}
+
+.sheet-sub-hall-icon svg {
+  width: 100%;
+  height: 100%;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.sheet-sub-dot {
+  color: rgba(140, 107, 46, 0.7);
+  line-height: 1;
+}
+
+.sheet-sub-points {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #9a7222;
+  font-weight: 700;
 }
 
 .sheet-recognition {
@@ -1097,7 +1710,7 @@ function toggleStorySpeech() {
 
 .model-hint {
   font-size: 0.72rem;
-  color: var(--mq-text-muted);
+  color: #5f645f;
   margin-bottom: 8px;
   line-height: 1.45;
 }
@@ -1107,9 +1720,35 @@ function toggleStorySpeech() {
   width: 100%;
   min-height: 220px;
   height: min(42vh, 300px);
-  border-radius: 12px;
+  border-radius: 16px;
+  border: 1px solid #e0d3bb;
   overflow: hidden;
-  background: radial-gradient(ellipse at center, #f5ece0 0%, #faf3e9 70%);
+  background: radial-gradient(ellipse at center, #f6efe3 0%, #fbf8f2 72%);
+}
+
+.model-badge {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 54px;
+  height: 54px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.model-badge img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  border-radius: 999px;
+  transform: scale(1.42);
+  transform-origin: center;
 }
 
 .model-loading,
@@ -1152,7 +1791,7 @@ function toggleStorySpeech() {
 .sheet-story {
   font-size: 0.95rem;
   line-height: 1.6;
-  color: var(--mq-text-muted);
+  color: #3b3b3b;
   margin-bottom: 20px;
 }
 
@@ -1169,32 +1808,64 @@ function toggleStorySpeech() {
   gap: 10px;
 }
 
-.btn-secondary,
-.btn-primary {
+.btn-back,
+.btn-guide {
   flex: 1;
   min-height: var(--mq-tap-min);
-  border-radius: 10px;
-  font-weight: 600;
-  font-size: 0.95rem;
+  border-radius: 16px;
+  font-weight: 700;
+  font-size: 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
-.btn-secondary {
-  background: #b98a3d;
-  color: #fffdf8;
-  border: 1px solid #b98a3d;
+.btn-back {
+  justify-content: center;
+  padding-left: 0;
+  background: #f7f3ec;
+  color: #52654d;
+  border: 1px solid rgba(82, 101, 77, 0.46);
+  box-shadow: 0 2px 6px rgba(68, 58, 46, 0.06);
 }
 
-.btn-primary {
-  background: var(--mq-accent-soft);
-  color: var(--mq-accent);
-  border: 1px solid rgba(201, 162, 39, 0.4);
+.btn-guide {
+  background: #5f6f53;
+  color: #f7f3ec;
+  border: 1px solid rgba(76, 92, 67, 0.8);
+  box-shadow: 0 5px 12px rgba(58, 73, 50, 0.24);
+}
+
+.action-icon {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.action-icon svg {
+  width: 18px;
+  height: 18px;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.btn-back .action-icon {
+  position: static;
+  width: 16px;
+  height: 16px;
+  margin-right: 2px;
 }
 
 .chat-sheet {
   position: fixed;
   inset: 0;
   z-index: 120;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(31, 27, 20, 0.42);
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -1205,10 +1876,11 @@ function toggleStorySpeech() {
 .chat-panel {
   width: 100%;
   max-width: 520px;
-  height: min(78vh, 560px);
+  height: min(calc(var(--mq-vh, 1vh) * 74), 560px);
   border-radius: 18px 18px 14px 14px;
-  background: var(--mq-bg-elevated);
-  border: 1px solid var(--mq-border);
+  background: #f7f3ec;
+  border: 1px solid #d7be86;
+  box-shadow: 0 22px 46px rgba(54, 44, 31, 0.22);
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -1216,130 +1888,573 @@ function toggleStorySpeech() {
 
 .chat-head {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
-  gap: 10px;
-  padding: 14px 14px 10px;
-  border-bottom: 1px solid var(--mq-border);
+  gap: 12px;
+  min-height: 96px;
+  padding: 16px;
+  border-bottom: 1px solid rgba(122, 136, 104, 0.44);
+  background: #8b9776;
+}
+
+.chat-title-wrap {
+  display: grid;
+  grid-template-columns: 56px 1fr;
+  column-gap: 14px;
+  align-items: center;
+  min-width: 0;
+}
+
+.chat-brand {
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  display: inline-flex;
+  overflow: hidden;
+  background: #f7f3ec;
+  border: 1px solid rgba(214, 182, 95, 0.58);
+  grid-row: 1 / span 3;
+}
+
+.chat-brand svg {
+  width: 30px;
+  height: 30px;
+  stroke: #6f7d68;
+  stroke-width: 1.7;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  margin: auto;
 }
 
 .chat-title {
   margin: 0;
-  font-size: 1rem;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #f7f3ec;
 }
 
 .chat-sub {
   margin: 4px 0 0;
-  font-size: 0.75rem;
-  color: var(--mq-text-muted);
+  font-size: 0.72rem;
+  color: rgba(247, 243, 236, 0.88);
+}
+
+.chat-artifact-tag {
+  margin: 6px 0 0;
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 9px;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  letter-spacing: 0.02em;
+  color: #f7f3ec;
+  background: rgba(247, 243, 236, 0.16);
+  border: 1px solid rgba(247, 243, 236, 0.38);
 }
 
 .chat-close {
-  width: 24px;
-  height: 24px;
-  min-height: 24px;
-  padding: 0;
-  border-radius: 0;
-  background: transparent;
-  color: #4f4334;
-  border: 0;
+  min-height: 36px;
+  padding: 0 13px;
+  border-radius: 12px;
+  background: #f7f3ec;
+  color: #2f4a32;
+  border: 1px solid #d7cebb;
+  font-weight: 700;
+  font-size: 0.78rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+  white-space: nowrap;
+  box-shadow: 0 1px 2px rgba(40, 52, 35, 0.06);
 }
 
-.chat-close svg {
-  width: 16px;
-  height: 16px;
-  stroke: currentColor;
-  stroke-width: 2;
-  stroke-linecap: round;
-  stroke-linejoin: round;
+.chat-head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .chat-body {
   flex: 1;
   overflow: auto;
-  padding: 12px;
+  padding: 14px 16px 12px;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  background: #f7f3ec;
+  position: relative;
   -webkit-overflow-scrolling: touch;
 }
 
-.bubble {
-  max-width: 88%;
-  padding: 10px 12px;
-  border-radius: 12px;
-  font-size: 0.9rem;
-  line-height: 1.45;
+.chat-body > * {
+  position: relative;
+  z-index: 1;
+}
+
+.message-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 9px;
+}
+
+.message-row.me {
+  justify-content: flex-end;
+}
+
+.chat-bubble {
+  max-width: 78%;
+  padding: 18px 20px;
+  border-radius: 20px;
+  font-size: 0.93rem;
+  line-height: 1.62;
   white-space: pre-wrap;
   word-break: break-word;
-  border: 1px solid var(--mq-border);
+  border: 1px solid #ded3c0;
+  box-shadow: 0 8px 16px rgba(74, 59, 40, 0.1);
+  position: relative;
 }
 
-.bubble.ai {
-  align-self: flex-start;
-  background: var(--mq-surface);
-  color: var(--mq-text);
+.chat-bubble.ai {
+  border-radius: 20px 20px 20px 12px;
+  background: #fbf8f2;
+  color: #3b3b3b;
+  border-color: #d9c9a9;
 }
 
-.bubble.me {
-  align-self: flex-end;
-  background: rgba(201, 162, 39, 0.16);
-  color: var(--mq-text);
-  border-color: rgba(201, 162, 39, 0.25);
+.chat-bubble.ai::after {
+  content: "";
+  position: absolute;
+  left: -7px;
+  bottom: 10px;
+  width: 12px;
+  height: 12px;
+  background: #fbf8f2;
+  border-left: 1px solid #ded3c0;
+  border-bottom: 1px solid #ded3c0;
+  transform: rotate(45deg);
+}
+
+.chat-bubble.me {
+  border-radius: 20px 20px 12px 20px;
+  background: #7a8868;
+  color: #f7f4eb;
+  border-color: #657355;
+}
+
+.chat-bubble.me::after {
+  content: "";
+  position: absolute;
+  right: -7px;
+  bottom: 10px;
+  width: 12px;
+  height: 12px;
+  background: #7a9365;
+  border-right: 1px solid #6a8256;
+  border-bottom: 1px solid #6a8256;
+  transform: rotate(45deg);
+}
+
+.ai-avatar {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #f7f3ec;
+  border: 1px solid #d8ccb8;
+  box-shadow: 0 5px 10px rgba(84, 68, 47, 0.14);
+}
+
+.ai-avatar svg {
+  width: 18px;
+  height: 18px;
+  stroke: #6f7d68;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.chat-suggest-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 2px 0 6px;
+}
+
+.chat-suggest-chip {
+  min-height: 38px;
+  border-radius: 999px;
+  padding: 0 16px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #f8f4ea;
+  background: #7a8868;
+  border: 1px solid #687557;
+  box-shadow: 0 1px 4px rgba(47, 62, 40, 0.14);
+  display: inline-flex;
+  align-items: center;
+  white-space: nowrap;
+}
+
+.chat-empty-hint {
+  margin: 2px 0 0;
+  font-size: 0.76rem;
+  line-height: 1.45;
+  color: #6e7c7a;
+  text-align: center;
+  opacity: 0.82;
 }
 
 .chat-error {
   margin: 0;
   font-size: 0.75rem;
-  color: #e8a598;
+  color: #bf6a6a;
 }
 
 .chat-foot {
   display: flex;
+  align-items: center;
   gap: 10px;
-  padding: 12px;
-  border-top: 1px solid var(--mq-border);
-  background: rgba(250, 243, 233, 0.94);
+  padding: 12px 16px;
+  border-top: 1px solid rgba(122, 136, 104, 0.42);
+  background: #8b9776;
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
 }
 
 .chat-input {
   flex: 1;
-  min-height: 44px;
-  border-radius: 12px;
-  padding: 0 12px;
-  background: rgba(255, 253, 248, 0.88);
-  border: 1px solid rgba(185, 138, 61, 0.28);
-  color: #4a3f33;
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45);
+  min-height: 56px;
+  border-radius: 28px;
+  padding: 0 18px;
+  background: #f7f3ec;
+  border: 1px solid rgba(122, 136, 104, 0.4);
+  color: #3b3b3b;
+  font-size: 0.95rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
 }
 
 .chat-input::placeholder {
-  color: #9a8567;
+  color: #9aa29f;
 }
 
 .chat-input:focus {
   outline: none;
-  border-color: #ffffff;
-  box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.45);
+  border-color: rgba(126, 151, 109, 0.72);
+  box-shadow: 0 0 0 3px rgba(126, 151, 109, 0.24);
 }
 
 .chat-send {
   flex-shrink: 0;
-  min-height: 44px;
-  padding: 0 16px;
-  border-radius: 12px;
-  background: #9f712c;
-  color: #fffdf8;
+  width: 56px;
+  min-height: 56px;
+  padding: 0;
+  border-radius: 999px;
+  background: #7a8868;
+  color: #f7f3ec;
   font-weight: 800;
-  border: 1px solid #9f712c;
+  border: 1px solid #687557;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 10px rgba(52, 67, 45, 0.16);
 }
 
 .chat-send:disabled {
   opacity: 0.55;
 }
+
+.chat-send-icon {
+  width: 18px;
+  height: 18px;
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.12));
+}
+
+.chat-send-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid rgba(247, 244, 236, 0.45);
+  border-top-color: #f7f4ec;
+  border-radius: 999px;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 430px) {
+  .page {
+    padding-left: 12px;
+    padding-right: 12px;
+    gap: 10px;
+  }
+
+  .camera {
+    min-height: 206px;
+    border-radius: 20px;
+  }
+
+  .camera-frame {
+    width: min(88%, 320px);
+  }
+
+  .scan-tip {
+    width: 100%;
+    font-size: 0.82rem;
+  }
+
+  .scan-controls {
+    width: 100%;
+    min-height: 0;
+    gap: 10px;
+  }
+
+  .scan-btn {
+    min-height: 50px;
+    font-size: 0.96rem;
+  }
+
+  .sheet {
+    padding: 8px;
+    padding-bottom: max(8px, var(--mq-safe-bottom));
+  }
+
+  .sheet-panel {
+    max-width: none;
+    height: auto;
+    max-height: calc(var(--mq-vh, 1vh) * 100 - 16px - var(--mq-safe-bottom));
+    padding: 12px 12px 14px;
+    border-radius: 16px 16px 12px 12px;
+  }
+
+  .sheet-head {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+    margin-bottom: 4px;
+  }
+
+  .sheet-title {
+    font-size: 1.02rem;
+    line-height: 1.2;
+  }
+
+  .head-tools {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .voice {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .voice-select {
+    width: 100%;
+    max-width: none;
+    min-height: 34px;
+    padding: 0 8px;
+    font-size: 0.72rem;
+  }
+
+  .story-btn {
+    width: 100%;
+    min-height: 34px;
+    padding: 0 10px;
+    font-size: 0.72rem;
+    min-width: 0;
+    justify-self: stretch;
+  }
+
+  .sheet-sub {
+    margin-bottom: 8px;
+    font-size: 0.76rem;
+    line-height: 1.35;
+  }
+
+  .sheet-sub-hall {
+    min-width: 0;
+  }
+
+  .sheet-sub-hall span:last-child {
+    min-width: 0;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-block;
+  }
+
+  .model-block {
+    margin-bottom: 10px;
+  }
+
+  .model-hint {
+    font-size: 0.68rem;
+    margin-bottom: 6px;
+  }
+
+  .model-viewer-wrap {
+    min-height: 180px;
+    height: min(34vh, 240px);
+    border-radius: 14px;
+  }
+
+  .sheet-story {
+    font-size: 0.88rem;
+    line-height: 1.55;
+    margin-bottom: 14px;
+  }
+
+  .story-error {
+    margin-bottom: 12px;
+  }
+
+  .sheet-actions {
+    flex-direction: column;
+  }
+
+  .btn-back,
+  .btn-guide {
+    width: 100%;
+    min-height: 46px;
+    font-size: 0.92rem;
+  }
+
+ /* 弹窗遮罩层 */
+.chat-sheet {
+    padding: 8px;
+    padding-bottom: 0;
+    align-items: stretch;
+}
+
+/* 弹窗主体 panel */
+.chat-panel {
+    width: 100%;
+    max-width: none;
+    height: 100dvh;           /* 动态视口高度，随键盘变化 */
+    max-height: 100dvh;
+    border-radius: 0;
+    display: flex;             /* 弹窗 flex 布局 */
+    flex-direction: column;    /* 上下排列，消息区滚动，底栏固定 */
+}
+
+/* 顶部头部 */
+.chat-head {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    min-height: auto;
+    padding: 12px;
+}
+
+.chat-title-wrap {
+    width: 100%;
+    flex: 1 1 auto;
+    grid-template-columns: 40px minmax(0, 1fr);
+    column-gap: 8px;
+    row-gap: 2px;
+}
+
+.chat-brand {
+    width: 40px;
+    height: 40px;
+}
+
+.chat-title {
+    font-size: 0.95rem;
+    line-height: 1.15;
+}
+
+.chat-sub {
+    font-size: 0.66rem;
+    line-height: 1.25;
+}
+
+.chat-artifact-tag {
+    margin-top: 4px;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.66rem;
+}
+
+.chat-head-actions {
+    width: auto;
+    justify-content: flex-end;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.chat-close {
+    min-height: 32px;
+    padding: 0 10px;
+    font-size: 0.72rem;
+}
+
+/* 消息区，可滚动 */
+.chat-body {
+    padding: 10px 10px 8px;
+    gap: 10px;
+    min-height: 0;
+    flex: 1 1 auto;           /* 占据剩余空间 */
+    overflow-y: auto;          /* 可滚动 */
+    max-height: none;
+}
+
+.message-row {
+    gap: 7px;
+}
+
+.chat-bubble {
+    max-width: 84%;
+    padding: 12px 14px;
+    font-size: 0.86rem;
+    line-height: 1.55;
+}
+
+.chat-suggest-chip {
+    min-height: 34px;
+    padding: 0 14px;
+    font-size: 0.73rem;
+}
+
+.chat-empty-hint {
+    font-size: 0.72rem;
+}
+
+/* 底部输入栏 */
+.chat-foot {
+    flex-shrink: 0;            /* 底栏固定不被压缩 */
+    display: flex;              /* 弹性布局 */
+    padding: 10px 10px max(10px, env(safe-area-inset-bottom)); /* safe-area 兼容 iPhone notch */
+    gap: 8px;
+}
+
+/* 输入框 */
+.chat-input {
+    min-height: 50px;
+    border-radius: 25px;
+    padding: 0 14px;
+    font-size: 0.88rem;
+    flex: 1;                     /* 填充底栏剩余空间 */
+}
+
+/* 发送按钮 */
+.chat-send {
+    width: 50px;
+    min-height: 50px;
+}
+}
 </style>
+
+
+
