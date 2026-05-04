@@ -948,6 +948,17 @@ function toggleStorySpeech() {
       </span>
       <span>Place the QR code or artifact in the frame, then tap Scan.</span>
     </p>
+    <p class="qr-repo-link">
+      <span class="link-label">Artifact QR Repository:</span>
+      <a 
+        href="https://github.com/5555dfdf/CPT208/tree/main/public/artifact-qrcodes" 
+        target="_blank" 
+        rel="noopener noreferrer"
+        class="repo-url"
+      >
+        github.com/5555dfdf/CPT208
+      </a>
+    </p>
     <div class="scan-controls">
       <button type="button" class="scan-btn" :disabled="scanBusy || !stream" @click="runScan">
         <span class="scan-btn-icon" aria-hidden="true">
@@ -955,6 +966,7 @@ function toggleStorySpeech() {
             <path d="M4 8V5h3M20 8V5h-3M4 16v3h3M20 16v3h-3M7.5 12h9" />
           </svg>
         </span>
+
         <span>{{ scanBusy ? "Analyzing..." : "Scan" }}</span>
       </button>
       <button type="button" class="scan-btn scan-btn-mock" :disabled="scanBusy" @click="runMockScan">
@@ -971,6 +983,7 @@ function toggleStorySpeech() {
       <p v-if="scanError" class="scan-feedback error">
         {{ scanError }}
       </p>
+      
     </div>
     <div
       v-if="showResult && currentArt()"
@@ -1482,6 +1495,45 @@ function toggleStorySpeech() {
 
 .scan-feedback.error {
   color: #b55c4d;
+}
+
+.qr-repo-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin: 8px 0 12px;
+  padding: 8px 16px;
+  background: linear-gradient(135deg, #f7f3ec 0%, #f0ebe0 100%);
+  border-radius: 12px;
+  border: 1px solid #e8e0d0;
+}
+
+.link-label {
+  font-size: 0.72rem;
+  color: #7a6d5a;
+  font-weight: 500;
+}
+
+.repo-url {
+  font-size: 0.75rem;
+  color: #6b8e6b;
+  text-decoration: none;
+  font-family: 'Monaco', 'Consolas', monospace;
+  background: rgba(107, 142, 107, 0.1);
+  padding: 2px 8px;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.repo-url:hover {
+  color: #4a6b4a;
+  background: rgba(107, 142, 107, 0.2);
+  text-decoration: underline;
+}
+
+.repo-url:active {
+  transform: scale(0.98);
 }
 
 .sheet {
