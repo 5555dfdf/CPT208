@@ -82,26 +82,5 @@
     "modelGlb": "/models/tablet.glb",
     "qrPayload": "storylens:artifact:inscribed-clay-tablet",
     "qrPath": "/artifact-qrcodes/inscribed-clay-tablet.png"
-  },
-  {
-    "id": "damaged-helmet",
-    "name": "Damaged Helmet",
-    "modelGlb": "/models/DamagedHelmet.glb",
-    "qrPayload": "storylens:artifact:damaged-helmet",
-    "qrPath": "/artifact-qrcodes/damaged-helmet.png"
-  },
-  {
-    "id": "duck-vessel",
-    "name": "Duck Vessel",
-    "modelGlb": "/models/Duck.glb",
-    "qrPayload": "storylens:artifact:duck-vessel",
-    "qrPath": "/artifact-qrcodes/duck-vessel.png"
-  },
-  {
-    "id": "boombox-artifact",
-    "name": "BoomBox Artifact",
-    "modelGlb": "/models/BoomBox.glb",
-    "qrPayload": "storylens:artifact:boombox-artifact",
-    "qrPath": "/artifact-qrcodes/boombox-artifact.png"
   }
 ]

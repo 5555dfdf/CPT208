@@ -126,6 +126,11 @@ async function submit() {
 
         <p v-if="error" class="error" role="alert">{{ error }}</p>
 
+        <div class="test-hint" role="note">
+          <span class="test-hint-label">Test Account:</span>
+          <span class="test-hint-value">test / 123456</span>
+        </div>
+
         <button type="submit" class="primary" :disabled="submitting">
           {{ submitting ? "Logging in..." : "Log In" }}
         </button>
@@ -306,6 +311,27 @@ async function submit() {
   font-size: 0.84rem;
   color: #b14545;
   line-height: 1.35;
+}
+
+.test-hint {
+  background: rgba(184, 130, 44, 0.1);
+  border: 1px solid rgba(184, 130, 44, 0.25);
+  border-radius: 8px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+}
+
+.test-hint-label {
+  font-weight: 600;
+  color: #8a6520;
+}
+
+.test-hint-value {
+  color: #5b4520;
+  font-weight: 500;
 }
 
 .primary {

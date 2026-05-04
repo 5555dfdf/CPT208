@@ -22,7 +22,7 @@ const modelViewerLoading = ref(false);
 const scanBusy = ref(false);
 const scanError = ref("");
 const scanStatus = ref("");
-const qrDetectorSupported = ref(false);
+const qrDetectorSupported = ref(true);
 
 const showChat = ref(false);
 const chatArtifactId = ref("");
@@ -253,9 +253,7 @@ onActivated(() => {
 
 onMounted(() => {
   startCamera();
-  qrDetectorSupported.value =
-    typeof window !== "undefined" &&
-    "BarcodeDetector" in window;
+  qrDetectorSupported.value = true;
   bindVoiceChangeListener();
   loadStoryVoices();
 });
@@ -542,28 +540,55 @@ function parseArtifactIdFromQr(rawValue) {
   }
 }
 
-async function detectArtifactQr(canvas) {
-  if (typeof window === "undefined" || !("BarcodeDetector" in window)) {
-    return null;
-  }
+let QrScanner = null;
 
-  let detector;
+async function loadQrScanner() {
+  if (QrScanner) return QrScanner;
   try {
-    detector = new window.BarcodeDetector({ formats: ["qr_code"] });
-  } catch {
+    const module = await import("https://cdn.jsdelivr.net/npm/qr-scanner@1.4.2/qr-scanner.min.js");
+    QrScanner = module.default;
+    return QrScanner;
+  } catch (e) {
+    console.error("Failed to load QrScanner:", e);
     return null;
   }
+}
 
-  const codes = await detector.detect(canvas).catch(() => []);
-  for (const code of codes || []) {
-    const artifactId = parseArtifactIdFromQr(code?.rawValue);
-    if (!artifactId) continue;
+async function detectArtifactQr(canvas) {
+  if (typeof window === "undefined") {
+    return { artifactId: null, rawValue: null, found: false };
+  }
+
+  const Scanner = await loadQrScanner();
+  if (!Scanner) {
+    return { artifactId: null, rawValue: null, found: false };
+  }
+
+  try {
+    const result = await Scanner.scanImage(canvas, { returnDetailedScanResult: true });
+    if (!result) {
+      return { artifactId: null, rawValue: null, found: false };
+    }
+
+    const rawValue = typeof result === "string" ? result : result.data;
+    if (!rawValue) {
+      return { artifactId: null, rawValue: null, found: false };
+    }
+
+    const artifactId = parseArtifactIdFromQr(rawValue);
+    if (!artifactId) {
+      return { artifactId: null, rawValue, found: true };
+    }
+
     const artifact = state.artifacts.find((a) => a.id === artifactId);
     if (artifact) {
-      return { artifactId, rawValue: code.rawValue };
+      return { artifactId, rawValue, found: true };
     }
+
+    return { artifactId: null, rawValue, found: true };
+  } catch (e) {
+    return { artifactId: null, rawValue: null, found: false };
   }
-  return null;
 }
 
 async function openScannedArtifact(artifactId, statusMessage) {
@@ -609,9 +634,15 @@ async function runScan() {
 
   try {
     const canvas = captureFrameCanvas();
-    scanStatus.value = qrDetectorSupported.value
-      ? "Checking QR code..."
-      : "Recognizing artifact...";
+
+    if (!qrDetectorSupported.value) {
+      scanError.value =
+        "QR scanner failed to load. Please check your internet connection and refresh the page.";
+      scanStatus.value = "";
+      return;
+    }
+
+    scanStatus.value = "Checking QR code...";
 
     const qrResult = await detectArtifactQr(canvas);
     if (qrResult?.artifactId) {
@@ -623,26 +654,29 @@ async function runScan() {
       return;
     }
 
-    scanStatus.value = qrDetectorSupported.value
-      ? "No QR code found. Recognizing artifact..."
-      : "Recognizing artifact...";
+    if (!qrResult?.found) {
+      scanStatus.value = "No QR code found. Trying AI recognition...";
+    } else {
+      scanStatus.value = "QR code not recognized. Trying AI recognition...";
+    }
+
     const image = canvas.toDataURL("image/jpeg", 0.92);
     const result = await classifyCapturedImage(image);
 
     if (!result?.artifactId) {
       const raw = String(result?.raw || "").trim();
-      throw new Error(
-        raw
-          ? `The API returned "${raw}", but it could not be mapped to any artifact.`
-          : "The API did not return a recognizable artifact label.",
-      );
+      scanError.value = raw
+        ? `AI could not identify the artifact. The API returned "${raw}".`
+        : "AI could not identify the artifact. Please try again with better lighting.";
+      scanStatus.value = "";
+      return;
     }
 
     await openScannedArtifact(
       result.artifactId,
       result?.matchedLabel
         ? `Recognized as ${result.matchedLabel}.`
-        : "Artifact recognized.",
+        : "Artifact recognized by AI.",
     );
   } catch (error) {
     scanError.value = error?.message || "Failed to analyze the captured image.";

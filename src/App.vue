@@ -1,5 +1,5 @@
 ﻿<script setup>
-import { computed, provide, ref } from "vue";
+import { computed, provide, ref, onMounted } from "vue";
 import avatarImg from "@/assets/avatar1.png";
 import { createMuseumStore } from "./museum/store";
 import { createSocialStore } from "./museum/socialStore";
@@ -18,9 +18,43 @@ provide("museum", museum);
 const social = createSocialStore();
 provide("social", social);
 
-const stage = ref("splash");
-const current = ref("home");
-const previousTab = ref("home");
+const STORAGE_KEY_STAGE = "mq_stage";
+const STORAGE_KEY_CURRENT = "mq_current";
+const STORAGE_KEY_PREVIOUS_TAB = "mq_previous_tab";
+
+function loadPersistedState() {
+  try {
+    const savedStage = localStorage.getItem(STORAGE_KEY_STAGE);
+    const savedCurrent = localStorage.getItem(STORAGE_KEY_CURRENT);
+    const savedPreviousTab = localStorage.getItem(STORAGE_KEY_PREVIOUS_TAB);
+    return {
+      stage: savedStage || "splash",
+      current: savedCurrent || "home",
+      previousTab: savedPreviousTab || "home",
+    };
+  } catch {
+    return { stage: "splash", current: "home", previousTab: "home" };
+  }
+}
+
+function persistState(stageVal, currentVal, previousTabVal) {
+  try {
+    localStorage.setItem(STORAGE_KEY_STAGE, stageVal);
+    localStorage.setItem(STORAGE_KEY_CURRENT, currentVal);
+    localStorage.setItem(STORAGE_KEY_PREVIOUS_TAB, previousTabVal);
+  } catch {
+    // ignore storage errors
+  }
+}
+
+const saved = loadPersistedState();
+const stage = ref(saved.stage);
+const current = ref(saved.current);
+const previousTab = ref(saved.previousTab);
+
+function saveState() {
+  persistState(stage.value, current.value, previousTab.value);
+}
 
 const tabs = [
   { key: "home", label: "Home" },
@@ -42,30 +76,40 @@ const ActiveView = computed(() => views[current.value] || HomeView);
 
 function onLoginSuccess(payload) {
   stage.value = "app";
+  current.value = "home";
+  previousTab.value = "home";
   localStorage.setItem("mq_authed", "1");
   if (payload?.username) localStorage.setItem("mq_user", payload.username);
+  saveState();
 }
 
 function onSplashDone() {
   stage.value = "login";
+  saveState();
 }
 
 function openRegister() {
   stage.value = "register";
+  saveState();
 }
 
 function openForgotPassword() {
   stage.value = "forgot-password";
+  saveState();
 }
 
 function backToLogin() {
   stage.value = "login";
+  saveState();
 }
 
 function onRegisterSuccess(payload) {
   stage.value = "app";
+  current.value = "home";
+  previousTab.value = "home";
   localStorage.setItem("mq_authed", "1");
   if (payload?.username) localStorage.setItem("mq_user", payload.username);
+  saveState();
 }
 
 function switchTab(key) {
@@ -74,11 +118,27 @@ function switchTab(key) {
     previousTab.value = current.value;
   }
   current.value = key;
+  saveState();
 }
 
 function leaveProfile() {
   current.value = previousTab.value || "home";
+  saveState();
 }
+
+onMounted(() => {
+  if (localStorage.getItem("mq_authed") === "1" && stage.value !== "app") {
+    stage.value = "app";
+    saveState();
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden && localStorage.getItem("mq_authed") === "1" && stage.value !== "app") {
+      stage.value = "app";
+      saveState();
+    }
+  });
+});
 </script>
 
 <template>
