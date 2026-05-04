@@ -22,6 +22,7 @@ const modelViewerLoading = ref(false);
 const scanBusy = ref(false);
 const scanError = ref("");
 const scanStatus = ref("");
+const qrDetectorSupported = ref(false);
 
 const showChat = ref(false);
 const chatArtifactId = ref("");
@@ -252,6 +253,9 @@ onActivated(() => {
 
 onMounted(() => {
   startCamera();
+  qrDetectorSupported.value =
+    typeof window !== "undefined" &&
+    "BarcodeDetector" in window;
   bindVoiceChangeListener();
   loadStoryVoices();
 });
@@ -491,7 +495,7 @@ function buildRecognitionArtifacts() {
   });
 }
 
-function captureFrame() {
+function captureFrameCanvas() {
   const video = videoRef.value;
   if (!video || !stream.value) {
     throw new Error("Camera is not ready yet.");
@@ -512,7 +516,63 @@ function captureFrame() {
   }
 
   ctx.drawImage(video, 0, 0, width, height);
-  return canvas.toDataURL("image/jpeg", 0.92);
+  return canvas;
+}
+
+function parseArtifactIdFromQr(rawValue) {
+  const value = String(rawValue || "").trim();
+  if (!value) return "";
+
+  const direct = value.match(/^storylens:artifact:([a-z0-9-]+)$/i);
+  if (direct) return direct[1];
+
+  const looseMatch = value.match(/storylens:artifact:([a-z0-9-]+)/i);
+  if (looseMatch) return looseMatch[1];
+
+  try {
+    const url = new URL(value, window.location.origin);
+    return (
+      url.searchParams.get("artifact") ||
+      url.searchParams.get("artifactId") ||
+      url.hash.match(/artifact=([a-z0-9-]+)/i)?.[1] ||
+      ""
+    );
+  } catch {
+    return "";
+  }
+}
+
+async function detectArtifactQr(canvas) {
+  if (typeof window === "undefined" || !("BarcodeDetector" in window)) {
+    return null;
+  }
+
+  let detector;
+  try {
+    detector = new window.BarcodeDetector({ formats: ["qr_code"] });
+  } catch {
+    return null;
+  }
+
+  const codes = await detector.detect(canvas).catch(() => []);
+  for (const code of codes || []) {
+    const artifactId = parseArtifactIdFromQr(code?.rawValue);
+    if (!artifactId) continue;
+    const artifact = state.artifacts.find((a) => a.id === artifactId);
+    if (artifact) {
+      return { artifactId, rawValue: code.rawValue };
+    }
+  }
+  return null;
+}
+
+async function openScannedArtifact(artifactId, statusMessage) {
+  selectedId.value = artifactId;
+  scanStatus.value = statusMessage;
+  await import("@google/model-viewer");
+  scanArtifact(artifactId);
+  resetChatForArtifact();
+  showResult.value = true;
 }
 
 async function classifyCapturedImage(image) {
@@ -548,8 +608,25 @@ async function runScan() {
   }
 
   try {
-    const image = captureFrame();
-    scanStatus.value = "Recognizing artifact...";
+    const canvas = captureFrameCanvas();
+    scanStatus.value = qrDetectorSupported.value
+      ? "Checking QR code..."
+      : "Recognizing artifact...";
+
+    const qrResult = await detectArtifactQr(canvas);
+    if (qrResult?.artifactId) {
+      const art = state.artifacts.find((a) => a.id === qrResult.artifactId);
+      await openScannedArtifact(
+        qrResult.artifactId,
+        `QR recognized as ${art?.name || "artifact"}.`,
+      );
+      return;
+    }
+
+    scanStatus.value = qrDetectorSupported.value
+      ? "No QR code found. Recognizing artifact..."
+      : "Recognizing artifact...";
+    const image = canvas.toDataURL("image/jpeg", 0.92);
     const result = await classifyCapturedImage(image);
 
     if (!result?.artifactId) {
@@ -561,14 +638,12 @@ async function runScan() {
       );
     }
 
-    selectedId.value = result.artifactId;
-    scanStatus.value = result?.matchedLabel
-      ? `Recognized as ${result.matchedLabel}.`
-      : "Artifact recognized.";
-    await import("@google/model-viewer");
-    scanArtifact(result.artifactId);
-    resetChatForArtifact();
-    showResult.value = true;
+    await openScannedArtifact(
+      result.artifactId,
+      result?.matchedLabel
+        ? `Recognized as ${result.matchedLabel}.`
+        : "Artifact recognized.",
+    );
   } catch (error) {
     scanError.value = error?.message || "Failed to analyze the captured image.";
     scanStatus.value = "";

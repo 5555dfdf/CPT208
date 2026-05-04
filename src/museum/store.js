@@ -121,6 +121,36 @@ const initialArtifacts = [
     points: 21,
     modelGlb: "/models/tablet.glb",
   },
+  {
+    id: "damaged-helmet",
+    name: "Damaged Helmet",
+    hallId: "h3",
+    hallName: "Bronze Age",
+    story:
+      "A worn helmet form that invites close attention to damage, repair, and use. Its surface traces suggest how protective objects can become historical evidence, preserving marks of conflict, craftsmanship, and later survival.",
+    points: 18,
+    modelGlb: "/models/DamagedHelmet.glb",
+  },
+  {
+    id: "duck-vessel",
+    name: "Duck Vessel",
+    hallId: "h2",
+    hallName: "Gardens and Artifacts",
+    story:
+      "A duck-shaped object connecting animal imagery with daily life and decorative design. The compact form reflects close observation of nature while turning a familiar creature into a portable cultural object.",
+    points: 16,
+    modelGlb: "/models/Duck.glb",
+  },
+  {
+    id: "boombox-artifact",
+    name: "BoomBox Artifact",
+    hallId: "h3",
+    hallName: "Material Culture",
+    story:
+      "A modern object included as a contrast piece for material culture. Its buttons, speakers, and portable body show how everyday technologies can become museum objects when they reveal habits of listening, gathering, and design.",
+    points: 15,
+    modelGlb: "/models/BoomBox.glb",
+  },
 ];
 
 const initialZones = [

@@ -1,0 +1,107 @@
+[
+  {
+    "id": "horus-falcon-statue",
+    "name": "Horus Falcon Statue",
+    "modelGlb": "/models/HorusFalcon.glb",
+    "qrPayload": "storylens:artifact:horus-falcon-statue",
+    "qrPath": "/artifact-qrcodes/horus-falcon-statue.png"
+  },
+  {
+    "id": "dragon-motif-bowl",
+    "name": "Dragon Motif Bowl",
+    "modelGlb": "/models/BowlWithDragons.glb",
+    "qrPayload": "storylens:artifact:dragon-motif-bowl",
+    "qrPath": "/artifact-qrcodes/dragon-motif-bowl.png"
+  },
+  {
+    "id": "aphrodite-eros-sculpture",
+    "name": "Aphrodite and Eros Sculpture",
+    "modelGlb": "/models/AphroditeEros.glb",
+    "qrPayload": "storylens:artifact:aphrodite-eros-sculpture",
+    "qrPath": "/artifact-qrcodes/aphrodite-eros-sculpture.png"
+  },
+  {
+    "id": "statue-of-ur-ningirsu",
+    "name": "Statue of Ur-Ningirsu (Sumerian)",
+    "modelGlb": "/models/UrNingirsuStatue.glb",
+    "qrPayload": "storylens:artifact:statue-of-ur-ningirsu",
+    "qrPath": "/artifact-qrcodes/statue-of-ur-ningirsu.png"
+  },
+  {
+    "id": "bronze-bull-head-ornament",
+    "name": "Bronze Bull Head Ornament",
+    "modelGlb": "/models/BronzeBullHead.glb",
+    "qrPayload": "storylens:artifact:bronze-bull-head-ornament",
+    "qrPath": "/artifact-qrcodes/bronze-bull-head-ornament.png"
+  },
+  {
+    "id": "silver-gilt-bowl",
+    "name": "Gilt Silver Bowl",
+    "modelGlb": "/models/SilverGiltBowl.glb",
+    "qrPayload": "storylens:artifact:silver-gilt-bowl",
+    "qrPath": "/artifact-qrcodes/silver-gilt-bowl.png"
+  },
+  {
+    "id": "gelede-helmet-mask",
+    "name": "Gelede Helmet Mask",
+    "modelGlb": "/models/GeledeHelmetMask.glb",
+    "qrPayload": "storylens:artifact:gelede-helmet-mask",
+    "qrPath": "/artifact-qrcodes/gelede-helmet-mask.png"
+  },
+  {
+    "id": "preaching-buddha-statue",
+    "name": "Preaching Buddha Statue",
+    "modelGlb": "/models/buddha_preaching.glb",
+    "qrPayload": "storylens:artifact:preaching-buddha-statue",
+    "qrPath": "/artifact-qrcodes/preaching-buddha-statue.png"
+  },
+  {
+    "id": "weeping-cow-sculpture",
+    "name": "Weeping Cow Sculpture",
+    "modelGlb": "/models/crying_cow_sculpture.glb",
+    "qrPayload": "storylens:artifact:weeping-cow-sculpture",
+    "qrPath": "/artifact-qrcodes/weeping-cow-sculpture.png"
+  },
+  {
+    "id": "fish-pond-model",
+    "name": "Fish Pond Model",
+    "modelGlb": "/models/fish-pond.glb",
+    "qrPayload": "storylens:artifact:fish-pond-model",
+    "qrPath": "/artifact-qrcodes/fish-pond-model.png"
+  },
+  {
+    "id": "fragmentary-isis-serqet-figure",
+    "name": "Fragmentary Figure of Isis-Serqet",
+    "modelGlb": "/models/fragmentary_figure_of_the_goddess_isis-serqet.glb",
+    "qrPayload": "storylens:artifact:fragmentary-isis-serqet-figure",
+    "qrPath": "/artifact-qrcodes/fragmentary-isis-serqet-figure.png"
+  },
+  {
+    "id": "inscribed-clay-tablet",
+    "name": "Inscribed Clay Tablet",
+    "modelGlb": "/models/tablet.glb",
+    "qrPayload": "storylens:artifact:inscribed-clay-tablet",
+    "qrPath": "/artifact-qrcodes/inscribed-clay-tablet.png"
+  },
+  {
+    "id": "damaged-helmet",
+    "name": "Damaged Helmet",
+    "modelGlb": "/models/DamagedHelmet.glb",
+    "qrPayload": "storylens:artifact:damaged-helmet",
+    "qrPath": "/artifact-qrcodes/damaged-helmet.png"
+  },
+  {
+    "id": "duck-vessel",
+    "name": "Duck Vessel",
+    "modelGlb": "/models/Duck.glb",
+    "qrPayload": "storylens:artifact:duck-vessel",
+    "qrPath": "/artifact-qrcodes/duck-vessel.png"
+  },
+  {
+    "id": "boombox-artifact",
+    "name": "BoomBox Artifact",
+    "modelGlb": "/models/BoomBox.glb",
+    "qrPayload": "storylens:artifact:boombox-artifact",
+    "qrPath": "/artifact-qrcodes/boombox-artifact.png"
+  }
+]
