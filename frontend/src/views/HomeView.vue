@@ -1,4 +1,5 @@
-<script setup>\r\nimport { computed, nextTick, onUnmounted, reactive, ref, onMounted } from "vue";
+<script setup>
+import { computed, nextTick, onUnmounted, reactive, ref, onMounted } from "vue";
 import floorPlanImage from "@/assets/museum-floor-plan.png";
 import exhibitExplorerAvatar from "@/assets/exhibit-explorer-avatar.png";
 import selectedRouteIcon from "@/assets/selected-route-icon.png";
@@ -577,7 +578,7 @@ onUnmounted(() => {
       @click.self="closeRouteChat"
     >
       <div
-        class="route-chat-panel" :style="{ paddingBottom: keyboardHeight + \`"px\`" }"
+        class="route-chat-panel" :style="{ paddingBottom: keyboardHeight + 'px' }"
         role="dialog"
         aria-modal="true"
         aria-labelledby="route-chat-title"
@@ -1712,7 +1713,7 @@ onUnmounted(() => {
   .route-chat-panel {
     max-width: none;
     width: 100%;
-    height: 100dvh;           /* 动态视口高�?*/
+    height: 100dvh;           /* 动态视口高�?*/
     max-height: 100dvh;
     border-radius: 0;
     display: flex;
@@ -1764,11 +1765,11 @@ onUnmounted(() => {
     font-size: 0.7rem;
   }
 
-  /* 消息�?*/
+  /* 消息�?*/
   .route-chat-body {
     flex: 1 1 auto;           /* 占据剩余空间 */
     min-height: 0;
-    overflow-y: auto;          /* 可滚�?*/
+    overflow-y: auto;          /* 可滚�?*/
     padding: 10px;
     gap: 10px;
   }
