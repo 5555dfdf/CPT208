@@ -1,4 +1,11 @@
 #!/bin/bash
-cd backend
+set -e
+
+cd frontend
 npm install
-npm start
+npm run build
+
+
+cd ../backend
+npm install
+node index.js
