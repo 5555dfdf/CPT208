@@ -951,7 +951,7 @@ function toggleStorySpeech() {
     <p class="qr-repo-link">
       <span class="link-label">Artifact QR Repository:</span>
       <a 
-        href="https://github.com/5555dfdf/CPT208/tree/main/public/artifact-qrcodes" 
+        href="https://github.com/5555dfdf/CPT208/tree/main/frontend/public/artifact-qrcodes"
         target="_blank" 
         rel="noopener noreferrer"
         class="repo-url"
