@@ -1,5 +1,4 @@
-<script setup>
-import { computed, nextTick, onUnmounted, reactive, ref } from "vue";
+<script setup>\r\nimport { computed, nextTick, onUnmounted, reactive, ref, onMounted } from "vue";
 import floorPlanImage from "@/assets/museum-floor-plan.png";
 import exhibitExplorerAvatar from "@/assets/exhibit-explorer-avatar.png";
 import selectedRouteIcon from "@/assets/selected-route-icon.png";
@@ -8,15 +7,41 @@ import customizeIcon from "@/assets/customize-icon.png";
 import routeAiHeaderIcon from "@/assets/route-ai-header-icon.png";
 import { streamFetch } from "@/utils/api";
 
+const keyboardHeight = ref(0);
+
+function handleResize() {
+  if (typeof window.visualViewport !== 'undefined') {
+    const viewport = window.visualViewport;
+    const windowHeight = window.innerHeight;
+    const viewportHeight = viewport.height;
+    const diff = windowHeight - viewportHeight;
+    
+    if (diff > 50) {
+      keyboardHeight.value = diff;
+    } else {
+      keyboardHeight.value = 0;
+    }
+  }
+}
+
+function handleViewportResize() {
+  handleResize();
+}
+
+onMounted(() => {
+  window.addEventListener('resize', handleResize);
+  if (typeof window.visualViewport !== 'undefined') {
+    window.visualViewport.addEventListener('resize', handleViewportResize);
+    window.visualViewport.addEventListener('scroll', handleViewportResize);
+  }
+});
+
+
 const onRouteInputFocus = () => {
   nextTick(() => {
     const body = routeChatBodyRef.value;
-    body?.scrollIntoView({ behavior: "smooth", block: "end" });
-
-    const panel = body?.closest(".route-chat-panel");
-    if (panel) {
-      panel.style.paddingBottom = "300px";  // 临时腾出键盘空间
-      setTimeout(() => (panel.style.paddingBottom = ""), 300);
+    if (body) {
+      body.scrollTop = body.scrollHeight;
     }
   });
 };
@@ -552,7 +577,7 @@ onUnmounted(() => {
       @click.self="closeRouteChat"
     >
       <div
-        class="route-chat-panel"
+        class="route-chat-panel" :style="{ paddingBottom: keyboardHeight + \`"px\`" }"
         role="dialog"
         aria-modal="true"
         aria-labelledby="route-chat-title"
@@ -1687,7 +1712,7 @@ onUnmounted(() => {
   .route-chat-panel {
     max-width: none;
     width: 100%;
-    height: 100dvh;           /* 动态视口高度 */
+    height: 100dvh;           /* 动态视口高�?*/
     max-height: 100dvh;
     border-radius: 0;
     display: flex;
@@ -1739,11 +1764,11 @@ onUnmounted(() => {
     font-size: 0.7rem;
   }
 
-  /* 消息区 */
+  /* 消息�?*/
   .route-chat-body {
     flex: 1 1 auto;           /* 占据剩余空间 */
     min-height: 0;
-    overflow-y: auto;          /* 可滚动 */
+    overflow-y: auto;          /* 可滚�?*/
     padding: 10px;
     gap: 10px;
   }
