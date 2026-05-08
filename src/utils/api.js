@@ -1,7 +1,7 @@
 /**
- * 拼出请求后端的完整 URL。
- * 前后端同域时留空即可（相对路径 /api/...）。
- * 若 API 在别的端口/域名，在 .env 里设 VITE_API_BASE，例如 http://127.0.0.1:8787
+ * Assembles the full request URL for the backend.
+ * Leave empty if frontend and backend are on the same origin (use relative path like /api/...).
+ * If the API is on a different port/domain, set VITE_API_BASE in the .env file, e.g. http://127.0.0.1:8787
  */
 export function buildApiUrl(path) {
   const base = (
@@ -89,7 +89,7 @@ export async function streamFetch(
 
 
 /**
- * 便捷函数：把流式结果拼成完整字符串并可选地在每个字符到达时回调
+ * Utility function: Concatenates streaming results into a complete string and optionally invokes a callback when each character arrives.
  */
 export async function streamToString(path, opts = {}, onChar) {
   let out = ''
