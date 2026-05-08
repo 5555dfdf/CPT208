@@ -135,3 +135,5 @@ app.post('/api/agent/classify-image', async (req, res) => {
 app.listen(PORT, () => {
   console.log(`[museum-agent-server] listening on http://localhost:${PORT}`)
 })
+
+dotenv.config()

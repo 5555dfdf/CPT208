@@ -7,6 +7,7 @@ For our source code: <https://github.com/5555dfdf/CPT208>
 For our portfolio of system design and iteration: <https://makabakaaaaaaaaa.github.io/CPT208-MuseumProject-A3-3/>
 
 For our system: https://storylens-museum.netlify.app/
+
 ## Table of Contents
 
 - [Features](#features)
@@ -64,8 +65,8 @@ The application uses **reactive stores** to manage data:
 
 | Store | File | Purpose |
 |-------|------|---------|
-| Museum Store | `src/museum/store.js` | Core application state (artifacts, points, collections) |
-| Social Store | `src/museum/socialStore.js` | Social features (saved posts, interactions) |
+| Museum Store | `frontend/src/museum/store.js` | Core application state (artifacts, points, collections) |
+| Social Store | `frontend/src/museum/socialStore.js` | Social features (saved posts, interactions) |
 
 ### User Input Handling
 
@@ -170,44 +171,62 @@ const cameraError = ref("")    // Camera permission errors
 
 ```
 CPT208/
-├── src/
-│   ├── views/           # Vue components for each page
-│   │   ├── HomeView.vue      # Home page with museum map
-│   │   ├── ScanView.vue      # QR scanning and 3D viewing
-│   │   ├── CollectionView.vue # Artifact collection progress
-│   │   ├── StoreView.vue     # Gift shop
-│   │   ├── CommunityView.vue # Social community
-│   │   ├── ProfileView.vue   # User profile
-│   │   ├── LoginView.vue     # Login page
-│   │   ├── RegisterView.vue  # Registration page
-│   │   └── ForgotPasswordView.vue
-│   ├── museum/          # State management
-│   │   ├── store.js          # Core application state
-│   │   └── socialStore.js    # Social features state
-│   ├── utils/           # Utility functions
-│   │   ├── api.js            # API client
-│   │   ├── authApi.js        # Authentication API
-│   │   └── amap.js           # Map integration
-│   ├── data/            # Mock data
-│   ├── assets/          # Static assets (images, icons)
-│   ├── App.vue          # Root component
-│   └── main.js          # Application entry point
-├── public/
-│   ├── models/          # 3D model files (.glb)
-│   └── artifact-qrcodes/ # QR codes for artifacts
-├── storylens_backend/   # Express backend
-│   └── server/          # API endpoints and services
-├── docs/                # API documentation
-├── scripts/             # Utility scripts
-└── ai/                  # AI coding logs
-    ├── README.md            # Vibe coding methodology overview
-    └── logs/                # Prompts used for core components
-        ├── homeview-prompts.md
-        ├── scanview-prompts.md
-        ├── store-prompts.md
-        ├── backend-prompts.md
-        ├── collectionview-prompts.md
-        └── community-prompts.md
+├── frontend/                    # Vue.js frontend application
+│   ├── src/                     # Source code
+│   │   ├── views/               # Vue components for each page
+│   │   │   ├── HomeView.vue      # Home page with museum map
+│   │   │   ├── ScanView.vue      # QR scanning and 3D viewing
+│   │   │   ├── CollectionView.vue # Artifact collection progress
+│   │   │   ├── StoreView.vue     # Gift shop
+│   │   │   ├── CommunityView.vue # Social community
+│   │   │   ├── ProfileView.vue   # User profile
+│   │   │   ├── LoginView.vue     # Login page
+│   │   │   ├── RegisterView.vue  # Registration page
+│   │   │   └── ForgotPasswordView.vue
+│   │   ├── museum/              # State management
+│   │   │   ├── store.js          # Core application state
+│   │   │   └── socialStore.js    # Social features state
+│   │   ├── utils/               # Utility functions
+│   │   │   ├── api.js            # API client
+│   │   │   ├── authApi.js        # Authentication API
+│   │   │   └── amap.js           # Map integration
+│   │   ├── data/                # Mock data
+│   │   ├── assets/              # Static assets (images, icons)
+│   │   ├── App.vue              # Root component
+│   │   └── main.js              # Application entry point
+│   ├── public/                  # Static files served directly
+│   │   ├── models/              # 3D model files (.glb)
+│   │   └── artifact-qrcodes/     # QR codes for artifacts
+│   ├── docs/                    # API documentation
+│   ├── scripts/                 # Utility scripts
+│   ├── ai/                      # AI coding logs
+│   │   ├── README.md            # Vibe coding methodology overview
+│   │   └── logs/                # Prompts used for core components
+│   ├── package.json             # Frontend dependencies
+│   ├── package-lock.json        # Locked dependencies
+│   ├── vite.config.js           # Vite configuration
+│   ├── index.html               # HTML entry point
+│   └── jsconfig.json            # JS configuration
+├── backend/                     # Express.js backend
+│   ├── api/                     # API endpoints
+│   │   ├── agent/               # AI-related endpoints
+│   │   │   ├── chat.js          # AI chat interface
+│   │   │   └── classify-image.js # Image classification
+│   │   └── health.js            # Health check endpoint
+│   ├── lib/                     # Utility libraries
+│   │   ├── agent-service.js     # AI agent service
+│   │   └── vision-service.js    # Computer vision service
+│   ├── data/                    # Data files
+│   │   └── artifact_knowledge.json # Artifact knowledge base
+│   ├── package.json             # Backend dependencies
+│   ├── package-lock.json        # Locked dependencies
+│   ├── index.js                 # Server entry point
+│   ├── vercel.json              # Vercel deployment config
+│   └── .env.example             # Environment variables template
+├── .env.example                 # Root environment variables
+├── .gitignore                   # Git ignore rules
+├── entrypoint.sh                # Deployment script
+└── README.md                    # Project documentation
 ```
 
 ## Setup Instructions
@@ -221,10 +240,10 @@ Before starting, ensure you have the following installed:
 
 ### Frontend Setup
 
-1. Navigate to the project directory:
+1. Navigate to the frontend directory:
 
 ```bash
-cd CPT208
+cd CPT208/frontend
 ```
 
 1. Install frontend dependencies:
@@ -250,7 +269,7 @@ VITE_API_BASE=http://localhost:8787
 1. Navigate to the backend directory:
 
 ```bash
-cd storylens_backend/server
+cd CPT208/backend
 ```
 
 1. Install backend dependencies:
@@ -280,14 +299,14 @@ GOOGLE_CLOUD_API_KEY=your_google_cloud_api_key
 **Start the backend server:**
 
 ```bash
-cd storylens_backend/server
+cd CPT208/backend
 npm start
 ```
 
 **Start the frontend development server:**
 
 ```bash
-cd CPT208
+cd CPT208/frontend
 npm run dev
 ```
 
@@ -298,7 +317,7 @@ The application will be available at `http://localhost:5173`
 **Build the frontend:**
 
 ```bash
-cd CPT208
+cd CPT208/frontend
 npm run build
 ```
 
@@ -313,14 +332,15 @@ npm run preview
 To generate QR codes for artifacts:
 
 ```bash
+cd CPT208/frontend
 npm run generate:qrcodes
 ```
 
 ## API Documentation
 
-For detailed API documentation, see [docs/auth-api.md](docs/auth-api.md)
+For detailed API documentation, see [frontend/docs/auth-api.md](frontend/docs/auth-api.md)
 
-Notice: Login & Regiser APIs are designed for next iteration, not completed yet!
+Notice: Login & Register APIs are designed for next iteration, not completed yet!
 
 ### Key API Endpoints
 
