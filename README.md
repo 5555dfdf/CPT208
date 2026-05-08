@@ -266,31 +266,27 @@ VITE_API_BASE=http://localhost:8787
 
 ### Backend Setup
 
-1. Navigate to the backend directory:
+ Navigate to the backend directory:
 
 ```bash
 cd CPT208/backend
 ```
 
-1. Install backend dependencies:
+ Install backend dependencies:
 
 ```bash
 npm install
 ```
 
-1. Create environment variables:
+ Create environment variables:
 
 ```bash
 cp .env.example .env
 ```
 
-1. Edit `.env` file and add your API keys:
+ Edit `.env` file and add your API keys:
 
-```
-PORT=8787
-OPENAI_API_KEY=your_openai_api_key
-GOOGLE_CLOUD_API_KEY=your_google_cloud_api_key
-```
+
 
 ## Running the Application
 
