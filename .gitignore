@@ -1,7 +1,11 @@
-# 本地密钥，勿提交
+
 .env
 .env.local
 .env.*.local
 
 node_modules
 dist
+
+.idea
+**/dist
+*.log
