@@ -17,6 +17,10 @@ const PORT = Number.parseInt(process.env.PORT || '8787', 10)
 const app = express()
 app.use(express.json({ limit: '8mb' }))
 
+// Serve frontend static files
+const frontendDist = path.join(serverDir, 'frontend-dist')
+app.use(express.static(frontendDist))
+
 app.use((req, res, next) => {
   const corsHeaders = getCorsHeaders(req.headers.origin)
   Object.entries(corsHeaders).forEach(([key, value]) => {
@@ -132,8 +136,13 @@ app.post('/api/agent/classify-image', async (req, res) => {
   }
 })
 
-app.listen(PORT, () => {
-  console.log(`[museum-agent-server] listening on http://localhost:${PORT}`)
+// Catch-all route for SPA routing
+app.get('*', (req, res) => {
+  res.sendFile(path.join(frontendDist, 'index.html'))
+})
+
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`[museum-agent-server] listening on port ${PORT}`)
 })
 
 dotenv.config()
