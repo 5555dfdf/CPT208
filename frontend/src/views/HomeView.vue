@@ -1765,13 +1765,15 @@ onUnmounted(() => {
     font-size: 0.7rem;
   }
 
-  /* 消息�?*/
+
   .route-chat-body {
-    flex: 1 1 auto;           /* 占据剩余空间 */
+    flex: 1 1 auto;
     min-height: 0;
-    overflow-y: auto;          /* 可滚�?*/
+    overflow-y: auto;
     padding: 10px;
     gap: 10px;
+
+    max-height: 60vh;
   }
 
   .route-message-row {
