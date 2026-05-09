@@ -36,11 +36,11 @@ async function submit() {
   submitting.value = true;
   try {
     await new Promise((r) => setTimeout(r, 180));
-    if (u === "test" && p === "123456") {
+    if (u === "cpt208" && p === "cpt208") {
       emit("success", { username: u });
       return;
     }
-    error.value = "Invalid credentials. Try test / 123456.";
+    error.value = "Invalid credentials. Try cpt208 / cpt208.";
   } finally {
     submitting.value = false;
   }
@@ -128,7 +128,7 @@ async function submit() {
 
         <div class="test-hint" role="note">
           <span class="test-hint-label">Test Account:</span>
-          <span class="test-hint-value">test / 123456</span>
+          <span class="test-hint-value">cpt208 / cpt208</span>
         </div>
 
         <button type="submit" class="primary" :disabled="submitting">
